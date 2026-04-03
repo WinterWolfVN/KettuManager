@@ -68,6 +68,23 @@ jobs:
           echo "========== CHECK build.gradle for lspatch =========="
           grep -rn "lspatch\|LSPatch\|liblspatch" --include="*.gradle*" --include="*.kt" --include="*.java" . | head -30
 
+      - name: Decompile lspatch.aar classes
+        run: |
+          sudo apt-get install -y default-jdk
+          wget https://github.com/skylot/jadx/releases/download/v1.4.7/jadx-1.4.7.zip
+          unzip jadx-1.4.7.zip -d jadx
+          
+          mkdir -p extracted
+          unzip app/libs/lspatch.aar -d extracted/
+          
+          echo "Decompiling classes.jar..."
+          ./jadx/bin/jadx -d java_src extracted/classes.jar
+          
+          echo "========== API 26+ CALLS CHECK =========="
+          grep -rn "java.nio.file" java_src/ || echo "No NIO usage (Good!)"
+          grep -rn "PackageParser" java_src/ || echo "No PackageParser usage (Good!)"
+          grep -rn "RequiresApi" java_src/ || echo "No API restrictions (Good!)"
+          
       - name: Check minSdk references in source
         run: |
           echo "========== minSdk references =========="
