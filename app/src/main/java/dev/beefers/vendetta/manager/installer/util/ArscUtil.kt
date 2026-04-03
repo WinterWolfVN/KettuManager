@@ -55,7 +55,8 @@ object ArscUtil {
         valueType: BinaryResourceValue.Type,
         valueData: Int,
     ): BinaryResourceIdentifier {
-        val specChunk = this.getTypeSpecChunks(typeName).first()
+        val specChunk = this.typeSpecChunks.find { it.name == typeName } 
+            ?: error("Type $typeName not found")
         val typeChunks = this.getTypeChunks(typeName)
 
         val resourceNameIdx = this.keyStringPool.addString(resourceName)
