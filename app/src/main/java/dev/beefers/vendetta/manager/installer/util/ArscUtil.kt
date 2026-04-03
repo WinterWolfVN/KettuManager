@@ -13,7 +13,6 @@ object ArscUtil {
             val entry = zip.getEntry("resources.arsc") ?: error("APK missing resources.arsc")
             zip.getInputStream(entry).use { it.readBytes() }
         }
-
         return try {
             BinaryResourceFile(bytes)
         } catch (t: Throwable) {
@@ -24,15 +23,13 @@ object ArscUtil {
     fun BinaryResourceFile.getMainArscChunk(): ResourceTableChunk {
         if (this.chunks.size > 1)
             error("More than 1 top level chunk in resources.arsc")
-
         return this.chunks.first() as? ResourceTableChunk
             ?: error("Invalid top-level resources.arsc chunk")
     }
 
     fun BinaryResourceFile.getPackageChunk(): PackageChunk {
-        val mainChunk = this.getMainArscChunk()
-        return mainChunk.packages.firstOrNull()
-            ?: error("resources.arsc must contain at least 1 package chunk")
+        return this.getMainArscChunk().packages.singleOrNull()
+            ?: error("resources.arsc must contain exactly 1 package chunk")
     }
 
     fun PackageChunk.addColorResource(
@@ -55,12 +52,9 @@ object ArscUtil {
         valueType: BinaryResourceValue.Type,
         valueData: Int,
     ): BinaryResourceIdentifier {
-        val specChunk = this.typeSpecChunks.find { it.name == typeName } 
-            ?: error("Type $typeName not found")
+        val specChunk = this.getTypeSpecChunk(typeName)
         val typeChunks = this.getTypeChunks(typeName)
-
-        val resourceNameIdx = this.keyStringPool.addString(resourceName)
-
+        val resourceNameIdx = this.keyStringPool.addString(resourceName, true)
         val resourceIdx = specChunk.addResource(0) + if (BuildConfig.DEBUG) 0 else 1
 
         for (typeChunk in typeChunks) {
@@ -96,15 +90,26 @@ object ArscUtil {
         resourceId: BinaryResourceIdentifier,
         configurationName: String,
     ): String {
-        val packageChunk = this.packages.find { it.id == resourceId.packageId() }
-            ?: error("Unable to find target resource")
+        var targetPackage: PackageChunk? = null
+        for (pkg in this.packages) {
+            if (pkg.id == resourceId.packageId()) {
+                targetPackage = pkg
+                break
+            }
+        }
+        if (targetPackage == null) error("Unable to find target resource")
 
-        val typeChunk = packageChunk.getTypeChunks(resourceId.typeId())
-            .find { it.configuration.toString() == configurationName }
-            ?: error("Unable to find target resource")
+        var targetTypeChunk: TypeChunk? = null
+        for (typeChunk in targetPackage.getTypeChunks(resourceId.typeId())) {
+            if (typeChunk.configuration.toString() == configurationName) {
+                targetTypeChunk = typeChunk
+                break
+            }
+        }
+        if (targetTypeChunk == null) error("Unable to find target resource")
 
         val entry = try {
-            typeChunk.getEntry(resourceId.entryId())!!
+            targetTypeChunk.getEntry(resourceId.entryId())!!
         } catch (_: Throwable) {
             error("Unable to find target resource")
         }
