@@ -77,7 +77,7 @@ abstract class DownloadStep : Step() {
                 status = StepStatus.SUCCESSFUL
                 return
             } catch (e: Throwable) {
-                runner.logger.w("Cached file $fileName is invalid, redownloading")
+                runner.logger.i("Cached file $fileName is invalid, redownloading")
                 destination.delete()
             }
         }
