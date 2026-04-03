@@ -22,7 +22,7 @@ import java.util.zip.ZipFile
 import kotlin.math.roundToInt
 
 @Stable
-abstract class DownloadStep: Step() {
+abstract class DownloadStep : Step() {
 
     protected val preferenceManager: PreferenceManager by inject()
     protected val baseUrl = preferenceManager.mirror.baseUrl
@@ -40,36 +40,52 @@ abstract class DownloadStep: Step() {
         private set
 
     open suspend fun verify() {
-        if (!destination.exists() || destination.length() <= 0) {
-            error("Invalid file: ${destination.absolutePath}")
+        if (!destination.exists()) {
+            error("Downloaded file is missing: ${destination.absolutePath}")
         }
-        try {
-            ZipFile(destination).use { }
-        } catch (e: Exception) {
+
+        if (destination.length() <= 0) {
             destination.delete()
-            error("Corrupted zip: ${destination.absolutePath}")
+            error("Downloaded file is empty: ${destination.absolutePath}")
+        }
+
+        try {
+            ZipFile(destination).use { zip ->
+                val entries = zip.entries()
+                if (!entries.hasMoreElements()) {
+                    destination.delete()
+                    error("Downloaded archive has no entries: ${destination.absolutePath}")
+                }
+            }
+        } catch (t: Throwable) {
+            destination.delete()
+            error("Downloaded file is corrupted: ${destination.absolutePath}")
         }
     }
 
     override suspend fun run(runner: StepRunner) {
         val fileName = destination.name
-        
+        runner.logger.i("Checking cache for $fileName")
+
         if (destination.exists()) {
             try {
+                runner.logger.i("Verifying cached file $fileName")
                 verify()
                 cached = true
+                runner.logger.i("$fileName is cached and valid")
                 destination.copyTo(workingCopy, true)
                 status = StepStatus.SUCCESSFUL
                 return
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                runner.logger.w("Cached file $fileName is invalid, redownloading")
                 destination.delete()
             }
         }
 
         var lastProgress = 0f
         val result = downloadManager.download(url, destination) { newProgress ->
+            progress = newProgress
             if (newProgress != null) {
-                progress = newProgress
                 if (newProgress - lastProgress > 0.05f || newProgress == 1f) {
                     lastProgress = newProgress
                     runner.logger.d("$fileName: ${(newProgress * 100f).roundToInt()}%")
@@ -80,13 +96,18 @@ abstract class DownloadStep: Step() {
         when (result) {
             is DownloadResult.Success -> {
                 try {
+                    runner.logger.i("Verifying downloaded file $fileName")
                     verify()
+                    runner.logger.i("$fileName verified successfully")
                     destination.copyTo(workingCopy, true)
                 } catch (t: Throwable) {
-                    mainThread { context.showToast(R.string.msg_download_verify_failed) }
+                    mainThread {
+                        context.showToast(R.string.msg_download_verify_failed)
+                    }
                     throw t
                 }
             }
+
             is DownloadResult.Error -> {
                 mainThread {
                     context.showToast(R.string.msg_download_failed)
@@ -94,9 +115,10 @@ abstract class DownloadStep: Step() {
                 }
                 throw Error("Download failed: ${result.debugReason}")
             }
+
             is DownloadResult.Cancelled -> {
                 status = StepStatus.UNSUCCESSFUL
-                throw CancellationException("Cancelled")
+                throw CancellationException("$fileName download cancelled")
             }
         }
     }
