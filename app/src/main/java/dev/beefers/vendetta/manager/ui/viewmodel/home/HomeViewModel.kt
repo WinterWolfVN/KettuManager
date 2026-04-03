@@ -15,6 +15,7 @@ import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import dev.beefers.vendetta.manager.BuildConfig
 import dev.beefers.vendetta.manager.domain.manager.DownloadManager
+import dev.beefers.vendetta.manager.domain.manager.DownloadResult
 import dev.beefers.vendetta.manager.domain.manager.InstallManager
 import dev.beefers.vendetta.manager.domain.manager.InstallMethod
 import dev.beefers.vendetta.manager.domain.manager.PreferenceManager
@@ -31,7 +32,6 @@ import dev.beefers.vendetta.manager.utils.isMiui
 import kotlinx.coroutines.launch
 import java.io.File
 
-// help me
 fun versionStringToCode(version: String): Int {
     val parts = version.split('.').mapNotNull { it.toIntOrNull() }
     val major = parts.getOrNull(0) ?: 0
@@ -49,9 +49,8 @@ class HomeViewModel(
 ) : ScreenModel {
 
     private val cacheDir = context.externalCacheDir ?: File(
-        Environment.getExternalStorageDirectory(),
-        Environment.DIRECTORY_DOWNLOADS
-    ).resolve("KettuManager").also { it.mkdirs() }
+        context.filesDir, "cache"
+    ).also { it.mkdirs() }
 
     var discordVersions by mutableStateOf<Map<DiscordVersion.Type, DiscordVersion?>?>(null)
         private set
@@ -80,7 +79,7 @@ class HomeViewModel(
             val intent = context.packageManager.getLaunchIntentForPackage(it.packageName)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(intent)
+            if (intent != null) context.startActivity(intent)
         }
     }
 
@@ -90,11 +89,11 @@ class HomeViewModel(
 
     fun launchVendettaInfo() {
         installManager.current?.let {
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 data = Uri.parse("package:${it.packageName}")
-                context.startActivity(this)
             }
+            context.startActivity(intent)
         }
     }
 
@@ -107,8 +106,8 @@ class HomeViewModel(
         } ?: return
 
         if (latestVersion > currentVersion) {
-            for (file in (context.externalCacheDir ?: context.cacheDir).listFiles()
-                ?: emptyArray()) {
+            val cacheFiles = (context.externalCacheDir ?: context.cacheDir).listFiles() ?: emptyArray()
+            for (file in cacheFiles) {
                 if (file.isDirectory) file.deleteRecursively()
             }
         }
@@ -117,13 +116,12 @@ class HomeViewModel(
     private fun checkForUpdate() {
         screenModelScope.launch {
             release = repo.getLatestRelease("C0C0B01/KettuManager").dataOrNull
-//            release?.let {
-//                val cleanTag = it.tagName.removePrefix("v")
-//                val tagCode = versionStringToCode(cleanTag)
-//                showUpdateDialog = tagCode > BuildConfig.VERSION_CODE
-//            }
             release?.let {
-                showUpdateDialog = it.tagName.toInt() > BuildConfig.VERSION_CODE
+                try {
+                    showUpdateDialog = it.tagName.toInt() > BuildConfig.VERSION_CODE
+                } catch (e: NumberFormatException) {
+                    showUpdateDialog = false
+                }
             }
             repo.getLatestRelease("C0C0B01/KettuXposed").ifSuccessful {
                 if (prefs.moduleVersion != it.tagName) {
@@ -140,8 +138,11 @@ class HomeViewModel(
             val update = File(cacheDir, "update.apk")
             if (update.exists()) update.delete()
             isUpdating = true
-            downloadManager.downloadUpdate(update)
+            
+            val result = downloadManager.downloadUpdate(update)
             isUpdating = false
+            
+            if (result != DownloadResult.Success) return@launch
 
             val installer: Installer = when (prefs.installMethod) {
                 InstallMethod.DEFAULT -> SessionInstaller(context)
@@ -151,5 +152,4 @@ class HomeViewModel(
             installer.installApks(silent = !isMiui, update)
         }
     }
-
 }
