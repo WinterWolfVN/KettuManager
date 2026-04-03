@@ -1,7 +1,5 @@
 package dev.beefers.vendetta.manager.installer.step.patching
 
-import com.github.diamondminer88.zip.ZipReader
-import com.github.diamondminer88.zip.ZipWriter
 import dev.beefers.vendetta.manager.R
 import dev.beefers.vendetta.manager.domain.manager.PreferenceManager
 import dev.beefers.vendetta.manager.installer.step.Step
@@ -13,10 +11,14 @@ import dev.beefers.vendetta.manager.installer.step.download.DownloadLibsStep
 import dev.beefers.vendetta.manager.installer.step.download.DownloadResourcesStep
 import dev.beefers.vendetta.manager.installer.util.ManifestPatcher
 import org.koin.core.component.inject
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.Deflater
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
-/**
- * Modifies each APKs manifest in order to change the package and app name as well as whether or not its debuggable
- */
 class PatchManifestsStep : Step() {
 
     private val preferences: PreferenceManager by inject()
@@ -30,36 +32,51 @@ class PatchManifestsStep : Step() {
         val langApk = runner.getCompletedStep<DownloadLangStep>().workingCopy
         val resApk = runner.getCompletedStep<DownloadResourcesStep>().workingCopy
 
-        arrayOf(baseApk, libsApk, langApk, resApk).forEach { apk ->
-            runner.logger.i("Reading AndroidManifest.xml from ${apk.name}")
-            val manifest = ZipReader(apk)
-                .use { zip -> zip.openEntry("AndroidManifest.xml")?.read() }
-                ?: throw IllegalStateException("No manifest in ${apk.name}")
+        listOf(baseApk, libsApk, langApk, resApk).forEach { apk ->
+            val tempFile = File(apk.parent, apk.name + ".tmp")
+            val buffer = ByteArray(128 * 1024)
 
-            ZipWriter(apk, true).use { zip ->
-                runner.logger.i("Changing package and app name in ${apk.name}")
-                val patchedManifestBytes = if (apk == baseApk) {
-                    ManifestPatcher.patchManifest(
-                        manifestBytes = manifest,
-                        packageName = preferences.packageName,
-                        appName = preferences.appName,
-                        debuggable = preferences.debuggable,
-                    )
-                } else {
-                    runner.logger.i("Changing package name in ${apk.name}")
-                    ManifestPatcher.renamePackage(manifest, preferences.packageName)
+            FileInputStream(apk).buffered(128 * 1024).use { fis ->
+                ZipInputStream(fis).use { zis ->
+                    FileOutputStream(tempFile).buffered(128 * 1024).use { fos ->
+                        ZipOutputStream(fos).use { zos ->
+                            zos.setLevel(Deflater.BEST_SPEED)
+                            
+                            var entry: ZipEntry? = zis.nextEntry
+                            while (entry != null) {
+                                val newEntry = ZipEntry(entry.name)
+                                zos.putNextEntry(newEntry)
+
+                                if (entry.name == "AndroidManifest.xml") {
+                                    val manifestBytes = zis.readBytes()
+                                    val patchedManifest = if (apk == baseApk) {
+                                        ManifestPatcher.patchManifest(
+                                            manifestBytes = manifestBytes,
+                                            packageName = preferences.packageName,
+                                            appName = preferences.appName,
+                                            debuggable = preferences.debuggable,
+                                        )
+                                    } else {
+                                        ManifestPatcher.renamePackage(manifestBytes, preferences.packageName)
+                                    }
+                                    zos.write(patchedManifest)
+                                } else {
+                                    var len: Int
+                                    while (zis.read(buffer).also { len = it } > 0) {
+                                        zos.write(buffer, 0, len)
+                                    }
+                                }
+                                
+                                zos.closeEntry()
+                                zis.closeEntry()
+                                entry = zis.nextEntry
+                            }
+                        }
+                    }
                 }
-
-                runner.logger.i("Deleting old AndroidManifest.xml in ${apk.name}")
-                zip.deleteEntry(
-                    "AndroidManifest.xml",
-                    /* fillVoid = */ apk == libsApk || apk == baseApk
-                ) // Preserve alignment in libs apk
-
-                runner.logger.i("Adding patched AndroidManifest.xml in ${apk.name}")
-                zip.writeEntry("AndroidManifest.xml", patchedManifestBytes)
             }
+            apk.delete()
+            tempFile.renameTo(apk)
         }
     }
-
 }
