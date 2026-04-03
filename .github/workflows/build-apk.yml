@@ -1,0 +1,40 @@
+name: Build Kettu Manager (Android 7) 🦊🚀
+
+on:
+  workflow_dispatch: # Cho phép bấm nút Build bằng tay 😈
+  push:
+    branches: [ "main", "master" ] # Tự build khi có code mới push lên
+
+jobs:
+  build-apk:
+    name: 🏗️ Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # BẮT BUỘC: Để các lệnh git trong build.gradle.kts hoạt động!
+
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: 🐘 Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: 🔑 Cấp quyền thực thi cho Gradle
+        run: chmod +x gradlew
+
+      - name: 🔨 Build Debug APK (Android 7 Ready)
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: 📤 Upload APK File
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kettu-Manager-Android7-Debug
+          path: app/build/outputs/apk/debug/**/*.apk
+          retention-days: 7 # Giữ file trên GitHub 7 ngày
