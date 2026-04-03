@@ -2,7 +2,6 @@ package dev.beefers.vendetta.manager.domain.manager
 
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import androidx.annotation.StringRes
 import dev.beefers.vendetta.manager.R
 import dev.beefers.vendetta.manager.domain.manager.base.BasePreferenceManager
@@ -13,8 +12,7 @@ import java.util.concurrent.TimeUnit
 class PreferenceManager(context: Context) :
     BasePreferenceManager(context.getSharedPreferences("prefs", Context.MODE_PRIVATE)) {
 
-    val DEFAULT_MODULE_LOCATION =
-        (context.externalCacheDir ?: File(Environment.getExternalStorageDirectory(), Environment.DIRECTORY_DOWNLOADS).resolve("PupuManager").also { it.mkdirs() }).resolve("xposed.apk")
+    val DEFAULT_MODULE_LOCATION = File(context.filesDir, "xposed.apk")
 
     var packageName by stringPreference("package_name", "cocobo1.pupu.app")
 
@@ -53,7 +51,6 @@ class PreferenceManager(context: Context) :
     var allowDowngrade by booleanPreference("allow_downgrade", false)
 
     init {
-        // Will be removed next update
         if(mirror == Mirror.VENDETTA_ROCKS) mirror = Mirror.VENDETTA_ROCKS_ALT
     }
 
@@ -78,7 +75,7 @@ enum class UpdateCheckerDuration(@StringRes val labelRes: Int, val time: Long, v
 
 enum class Mirror(val baseUrl: String) {
     DEFAULT("https://tracker.vendetta.rocks"),
-    VENDETTA_ROCKS("https://proxy.vendetta.rocks"), // Temporarily added for compatibility
+    VENDETTA_ROCKS("https://proxy.vendetta.rocks"),
     VENDETTA_ROCKS_ALT("https://proxy.vendetta.rocks"),
     K6("https://vd.k6.tf"),
     NEXPID("https://tracker.vd.nexpid.xyz")
