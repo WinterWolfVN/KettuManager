@@ -2,7 +2,6 @@ package dev.beefers.vendetta.manager.installer.step.patching
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
-import com.github.diamondminer88.zip.ZipWriter
 import dev.beefers.vendetta.manager.R
 import dev.beefers.vendetta.manager.domain.manager.PreferenceManager
 import dev.beefers.vendetta.manager.installer.step.Step
@@ -17,10 +16,13 @@ import dev.beefers.vendetta.manager.installer.util.ArscUtil.getResourceFileName
 import dev.beefers.vendetta.manager.installer.util.AxmlUtil
 import dev.beefers.vendetta.manager.utils.DiscordVersion
 import org.koin.core.component.inject
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
-/**
- * Replaces the existing app icons with Kettu tinted ones
- */
 class ReplaceIconStep : Step() {
 
     private val preferences: PreferenceManager by inject()
@@ -33,14 +35,10 @@ class ReplaceIconStep : Step() {
     override suspend fun run(runner: StepRunner) {
         val baseApk = runner.getCompletedStep<DownloadBaseStep>().workingCopy
 
-        runner.logger.i("Reading resources.arsc")
         val arsc = ArscUtil.readArsc(baseApk)
-        
         val iconRscIds = AxmlUtil.readManifestIconInfo(baseApk)
         val squareIconFile = arsc.getMainArscChunk().getResourceFileName(iconRscIds.squareIcon, "anydpi-v26")
         val roundIconFile = arsc.getMainArscChunk().getResourceFileName(iconRscIds.roundIcon, "anydpi-v26")
-
-        runner.logger.i("Patching icon assets (squareIcon=$squareIconFile, roundIcon=$roundIconFile)")
 
         val backgroundColor = arsc.getPackageChunk().addColorResource("kettu_color", Color(0xFF000000))
 
@@ -50,12 +48,10 @@ class ReplaceIconStep : Step() {
             else -> null
         }
         
-        for (rscFile in setOf(squareIconFile, roundIconFile)) { // setOf to not possibly patch same file twice
+        for (rscFile in setOf(squareIconFile, roundIconFile)) {
             val referencePath = if (postfix == null) rscFile else {
                 rscFile.replace("_$postfix.xml", ".xml")
             }
-
-            runner.logger.i("Patching adaptive icon ($rscFile <- $referencePath)")
 
             AxmlUtil.patchAdaptiveIcon(
                 apk = baseApk,
@@ -65,11 +61,31 @@ class ReplaceIconStep : Step() {
             )
         }
 
-        runner.logger.i("Writing and compiling resources.arsc")
-        ZipWriter(baseApk, /* append = */ true).use {
-            it.deleteEntry("resources.arsc")
-            it.writeEntry("resources.arsc", arsc.toByteArray())
-        }
-    }
+        val tempFile = File(baseApk.parent, baseApk.name + ".arsc_tmp")
+        val arscBytes = arsc.toByteArray()
+        val buffer = ByteArray(128 * 1024)
 
+        ZipInputStream(FileInputStream(baseApk).buffered(128 * 1024)).use { zis ->
+            ZipOutputStream(FileOutputStream(tempFile).buffered(128 * 1024)).use { zos ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (entry.name != "resources.arsc") {
+                        zos.putNextEntry(ZipEntry(entry.name))
+                        var len: Int
+                        while (zis.read(buffer).also { len = it } > 0) {
+                            zos.write(buffer, 0, len)
+                        }
+                        zos.closeEntry()
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+                zos.putNextEntry(ZipEntry("resources.arsc"))
+                zos.write(arscBytes)
+                zos.closeEntry()
+            }
+        }
+        baseApk.delete()
+        tempFile.renameTo(baseApk)
+    }
 }
