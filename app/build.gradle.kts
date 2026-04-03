@@ -54,7 +54,7 @@ android {
             "-Xcontext-receivers",
             "-P",
             "plugin:androidx.compose.compiler.plugins.kotlin:reportsDestination=" +
-                    layout.buildDirectory.get().asFile.resolve("report").absolutePath,
+                layout.buildDirectory.get().asFile.resolve("report").absolutePath,
         )
     }
 
@@ -100,10 +100,8 @@ dependencies {
     implementation(libs.bundles.coil)
     implementation(libs.bundles.compose)
     implementation(libs.bundles.koin)
-    
     implementation(libs.bundles.ktor)
     implementation("io.ktor:ktor-client-okhttp:2.3.13")
-    
     implementation(libs.bundles.shizuku)
     implementation(libs.bundles.voyager)
 
@@ -111,17 +109,22 @@ dependencies {
 
     implementation(libs.aboutlibraries.core)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
-    
+
     implementation(libs.binaryResources) {
         exclude(module = "checker-qual")
         exclude(module = "jsr305")
         exclude(module = "guava")
     }
-    
+
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.collections)
-    
     implementation("com.squareup.okio:okio:3.9.0")
+
+    implementation(libs.zip.android) {
+        artifact {
+            type = "aar"
+        }
+    }
 }
 
 fun getCurrentBranch(): String? =
@@ -152,7 +155,7 @@ fun exec(vararg command: String): String? {
 
         if (errout.size() > 0) null
         else stdout.toString(Charsets.UTF_8).trim()
-    } catch (e: Throwable) {
+    } catch (_: Throwable) {
         null
     }
 }
