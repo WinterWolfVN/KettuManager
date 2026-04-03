@@ -18,13 +18,9 @@ import dev.beefers.vendetta.manager.utils.showToast
 import kotlinx.coroutines.CancellationException
 import org.koin.core.component.inject
 import java.io.File
+import java.util.zip.ZipFile
 import kotlin.math.roundToInt
 
-/**
- * Specialized step used to download a file
- *
- * Files are downloaded to [destination] then copied to [workingCopy] for safe patching
- */
 @Stable
 abstract class DownloadStep: Step() {
 
@@ -34,19 +30,8 @@ abstract class DownloadStep: Step() {
     private val downloadManager: DownloadManager by inject()
     private val context: Context by inject()
 
-    /**
-     * Url of the desired file to download
-     */
     abstract val url: String
-
-    /**
-     * Where to download the file to
-     */
     abstract val destination: File
-
-    /**
-     * Where the downloaded file should be copied to so that it can be used for patching
-     */
     abstract val workingCopy: File
 
     override val group: StepGroup = StepGroup.DL
@@ -54,78 +39,65 @@ abstract class DownloadStep: Step() {
     var cached by mutableStateOf(false)
         private set
 
-    /**
-     * Verifies that a file was properly downloaded
-     */
     open suspend fun verify() {
-        if (!destination.exists())
-            error("Downloaded file is missing: ${destination.absolutePath}")
-
-        if (destination.length() <= 0)
-            error("Downloaded file is empty: ${destination.absolutePath}")
+        if (!destination.exists() || destination.length() <= 0) {
+            error("Invalid file: ${destination.absolutePath}")
+        }
+        try {
+            ZipFile(destination).use { }
+        } catch (e: Exception) {
+            destination.delete()
+            error("Corrupted zip: ${destination.absolutePath}")
+        }
     }
 
     override suspend fun run(runner: StepRunner) {
         val fileName = destination.name
-        runner.logger.i("Checking if $fileName is cached")
+        
         if (destination.exists()) {
-            runner.logger.i("Checking if $fileName isn't empty")
-            if (destination.length() > 0) {
-                runner.logger.i("$fileName is cached")
+            try {
+                verify()
                 cached = true
-
-                runner.logger.i("Moving $fileName to working directory")
                 destination.copyTo(workingCopy, true)
-
                 status = StepStatus.SUCCESSFUL
                 return
+            } catch (e: Exception) {
+                destination.delete()
             }
-
-            runner.logger.i("Deleting empty file: $fileName")
-            destination.delete()
         }
 
-        runner.logger.i("$fileName was not properly cached, downloading now")
-        var lastProgress: Float? = null
+        var lastProgress = 0f
         val result = downloadManager.download(url, destination) { newProgress ->
-            progress = newProgress
-            if (newProgress != lastProgress && newProgress != null) {
-                lastProgress = newProgress
-                runner.logger.d("$fileName download progress: ${(lastProgress!! * 100f).roundToInt()}%")
+            if (newProgress != null) {
+                progress = newProgress
+                if (newProgress - lastProgress > 0.05f || newProgress == 1f) {
+                    lastProgress = newProgress
+                    runner.logger.d("$fileName: ${(newProgress * 100f).roundToInt()}%")
+                }
             }
         }
 
         when (result) {
             is DownloadResult.Success -> {
                 try {
-                    runner.logger.i("Verifying downloaded file")
                     verify()
-                    runner.logger.i("$fileName downloaded successfully")
+                    destination.copyTo(workingCopy, true)
                 } catch (t: Throwable) {
-                    mainThread {
-                        context.showToast(R.string.msg_download_verify_failed)
-                    }
-
+                    mainThread { context.showToast(R.string.msg_download_verify_failed) }
                     throw t
                 }
-                runner.logger.i("Moving $fileName to working directory")
-                destination.copyTo(workingCopy, true)
             }
-
             is DownloadResult.Error -> {
                 mainThread {
                     context.showToast(R.string.msg_download_failed)
                     runner.downloadErrored = true
                 }
-
-                throw Error("Failed to download: ${result.debugReason}")
+                throw Error("Download failed: ${result.debugReason}")
             }
-
             is DownloadResult.Cancelled -> {
                 status = StepStatus.UNSUCCESSFUL
-                throw CancellationException("$fileName download cancelled")
+                throw CancellationException("Cancelled")
             }
         }
     }
-
 }
