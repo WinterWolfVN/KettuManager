@@ -10,84 +10,66 @@ import java.util.concurrent.TimeUnit
 
 class DownloadManager(
     private val context: Context,
-    private val prefs: PreferenceManager
+    private val preferences: PreferenceManager
 ) {
-
     private val httpClient = OkHttpClient.Builder()
         .connectionPool(ConnectionPool(15, 5, TimeUnit.MINUTES))
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
-        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
         .build()
 
-    suspend fun downloadDiscordApk(version: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
-        download("${prefs.mirror.baseUrl}/tracker/download/$version/base", out, onProgressUpdate)
+    suspend fun downloadDiscordApk(version: String, out: File, onProgressUpdate: (Float?) -> Unit) =
+        download("${preferences.mirror.baseUrl}/tracker/download/$version/base", out, onProgressUpdate)
 
-    suspend fun downloadSplit(version: String, split: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
-        download("${prefs.mirror.baseUrl}/tracker/download/$version/$split", out, onProgressUpdate)
+    suspend fun downloadSplit(version: String, split: String, out: File, onProgressUpdate: (Float?) -> Unit) =
+        download("${preferences.mirror.baseUrl}/tracker/download/$version/$split", out, onProgressUpdate)
 
-    suspend fun downloadVendetta(out: File, onProgressUpdate: (Float?) -> Unit) =
-        download(
-            "https://github.com/C0C0B01/KettuXposed/releases/latest/download/app-release.apk",
-            out,
-            onProgressUpdate
-        )
+    suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult = withContext(Dispatchers.IO) {
+        if (out.exists()) out.delete()
+        var retryCount = 0
+        var finalResult: DownloadResult = DownloadResult.Error("TIMEOUT")
 
-    suspend fun downloadUpdate(out: File) =
-        download(
-            "https://github.com/C0C0B01/KettuManager/releases/latest/download/Manager.apk",
-            out
-        ) {}
-
-    private suspend fun download(
-        url: String,
-        out: File,
-        onProgressUpdate: (Float?) -> Unit
-    ): DownloadResult = withContext(Dispatchers.IO) {
-        var trial = 0
-        while (trial < 3) {
+        while (retryCount < 3 && isActive) {
             try {
-                onProgressUpdate(null)
-                val request = Request.Builder()
-                    .url(url)
-                    .header("Connection", "keep-alive")
-                    .build()
-
-                httpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        trial++
-                        if (trial == 3) return@withContext DownloadResult.Error("${response.code}")
-                        delay(1000)
-                        return@continue
-                    }
-
-                    val body = response.body ?: return@withContext DownloadResult.Error("EMPTY")
-                    val totalBytes = body.contentLength()
+                val request = Request.Builder().url(url).build()
+                val response = httpClient.newCall(request).execute()
+                
+                if (!response.isSuccessful) {
+                    response.close()
+                    retryCount++
+                    delay(1000)
+                } else {
+                    val body = response.body ?: throw Exception("Empty")
+                    val totalSize = body.contentLength()
                     var downloaded = 0L
 
                     out.sink().buffer().use { sink ->
                         val source = body.source()
-                        val bufferSize = 64 * 1024L
                         while (isActive) {
-                            val read = source.read(sink.buffer, bufferSize)
+                            val read = source.read(sink.buffer, 64 * 1024L)
                             if (read == -1L) break
                             sink.emitCompleteSegments()
                             downloaded += read
-                            if (totalBytes > 0) {
-                                onProgressUpdate(downloaded.toFloat() / totalBytes.toFloat())
-                            }
+                            if (totalSize > 0) onProgressUpdate(downloaded.toFloat() / totalSize.toFloat())
                         }
                     }
-                    return@withContext DownloadResult.Success
+                    
+                    if (totalSize > 0 && downloaded < totalSize) {
+                        out.delete()
+                        retryCount++
+                    } else {
+                        return@withContext DownloadResult.Success
+                    }
                 }
             } catch (e: Exception) {
-                trial++
-                if (trial == 3) return@withContext DownloadResult.Error(e.message ?: "ERR")
+                retryCount++
+                if (out.exists()) out.delete()
                 delay(1000)
+                finalResult = DownloadResult.Error(e.message ?: "FAIL")
             }
         }
-        DownloadResult.Error("TIMEOUT")
+        finalResult
     }
 }
 
