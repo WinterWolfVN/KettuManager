@@ -1,0 +1,94 @@
+name: Analyze liblspatch.so
+
+on:
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Find all .so files
+        run: |
+          echo "========== TÌM TẤT CẢ .so TRONG REPO =========="
+          find . -name "*.so" -exec ls -lh {} \;
+          echo ""
+          find . -name "*.so"
+
+      - name: Analyze each .so file
+        run: |
+          for so in $(find . -name "*.so"); do
+            echo ""
+            echo "╔══════════════════════════════════════╗"
+            echo "  FILE: $so"
+            echo "╚══════════════════════════════════════╝"
+
+            echo "--- File Type ---"
+            file "$so"
+
+            echo ""
+            echo "--- ELF Header ---"
+            readelf -h "$so" 2>/dev/null || true
+
+            echo ""
+            echo "--- Android API Level (NOTE section) ---"
+            readelf -n "$so" 2>/dev/null || true
+
+            echo ""
+            echo "--- Dependencies ---"
+            readelf -d "$so" 2>/dev/null | grep NEEDED || true
+
+            echo ""
+            echo "--- JNI Functions ---"
+            nm -D "$so" 2>/dev/null | grep "Java_" || true
+
+            echo ""
+            echo "--- Exported Functions ---"
+            nm -D "$so" 2>/dev/null | grep " T " | head -30 || true
+
+            echo ""
+            echo "--- Strings: API/SDK/Android ---"
+            strings "$so" | grep -iE "android|api|sdk|min|ndk|version" | sort -u || true
+
+            echo ""
+            echo "--- Strings: Patch/Dex/Sign ---"
+            strings "$so" | grep -iE "patch|dex|sign|apk|classes|manifest" | sort -u || true
+
+            echo ""
+            echo "--- Build Info ---"
+            strings "$so" | grep -iE "clang|gcc|ndk|build" | sort -u | head -10 || true
+
+            echo "=========================================="
+          done
+
+      - name: Quick Summary
+        run: |
+          echo ""
+          echo "╔════════════════════════════════════════════╗"
+          echo "║            QUICK SUMMARY                   ║"
+          echo "╠════════════════════════════════════════════╣"
+          
+          for so in $(find . -name "*.so"); do
+            echo "║"
+            echo "║ 📁 $so"
+            
+            ARCH=$(readelf -h "$so" 2>/dev/null | grep "Machine" | awk '{print $2}')
+            echo "║    Arch: $ARCH"
+            
+            API=$(readelf -n "$so" 2>/dev/null | grep -oP 'API Level:\s*\K\d+' || echo "unknown")
+            echo "║    API Level: $API"
+            
+            if [ "$API" != "unknown" ] && [ "$API" -le 24 ] 2>/dev/null; then
+              echo "║    ✅ OK cho Android 7!"
+            elif [ "$API" != "unknown" ] && [ "$API" -gt 24 ] 2>/dev/null; then
+              echo "║    ❌ KHÔNG chạy Android 7! Cần rebuild"
+            else
+              echo "║    ⚠️  Không xác định được API level"
+            fi
+          done
+          
+          echo "║"
+          echo "╚════════════════════════════════════════════╝"
