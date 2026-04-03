@@ -2,17 +2,16 @@ package dev.beefers.vendetta.manager.installer.util
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import com.github.diamondminer88.zip.ZipReader
 import com.google.devrel.gmscore.tools.apk.arsc.*
 import dev.beefers.vendetta.manager.BuildConfig
 import java.io.File
-import java.util.zip.ZipFile
 
 object ArscUtil {
     fun readArsc(apk: File): BinaryResourceFile {
-        val bytes = ZipFile(apk).use { zip ->
-            val entry = zip.getEntry("resources.arsc") ?: error("APK missing resources.arsc")
-            zip.getInputStream(entry).use { it.readBytes() }
-        }
+        val bytes = ZipReader(apk).use { it.openEntry("resources.arsc")?.read() }
+            ?: error("APK missing resources.arsc")
+
         return try {
             BinaryResourceFile(bytes)
         } catch (t: Throwable) {
@@ -23,6 +22,7 @@ object ArscUtil {
     fun BinaryResourceFile.getMainArscChunk(): ResourceTableChunk {
         if (this.chunks.size > 1)
             error("More than 1 top level chunk in resources.arsc")
+
         return this.chunks.first() as? ResourceTableChunk
             ?: error("Invalid top-level resources.arsc chunk")
     }
@@ -90,26 +90,15 @@ object ArscUtil {
         resourceId: BinaryResourceIdentifier,
         configurationName: String,
     ): String {
-        var targetPackage: PackageChunk? = null
-        for (pkg in this.packages) {
-            if (pkg.id == resourceId.packageId()) {
-                targetPackage = pkg
-                break
-            }
-        }
-        if (targetPackage == null) error("Unable to find target resource")
+        val packageChunk = this.packages.find { it.id == resourceId.packageId() }
+            ?: error("Unable to find target resource")
 
-        var targetTypeChunk: TypeChunk? = null
-        for (typeChunk in targetPackage.getTypeChunks(resourceId.typeId())) {
-            if (typeChunk.configuration.toString() == configurationName) {
-                targetTypeChunk = typeChunk
-                break
-            }
-        }
-        if (targetTypeChunk == null) error("Unable to find target resource")
+        val typeChunk = packageChunk.getTypeChunks(resourceId.typeId())
+            .find { it.configuration.toString() == configurationName }
+            ?: error("Unable to find target resource")
 
         val entry = try {
-            targetTypeChunk.getEntry(resourceId.entryId())!!
+            typeChunk.getEntry(resourceId.entryId())!!
         } catch (_: Throwable) {
             error("Unable to find target resource")
         }
