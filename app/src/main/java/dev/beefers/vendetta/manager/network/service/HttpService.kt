@@ -4,9 +4,9 @@ import dev.beefers.vendetta.manager.network.utils.ApiError
 import dev.beefers.vendetta.manager.network.utils.ApiFailure
 import dev.beefers.vendetta.manager.network.utils.ApiResponse
 import io.ktor.client.HttpClient
+import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.request
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 
@@ -16,33 +16,18 @@ class HttpService(
 ) {
 
     suspend inline fun <reified T> request(builder: HttpRequestBuilder.() -> Unit = {}): ApiResponse<T> {
-        var body: String? = null
-
-        val response = try {
+        return try {
             val response = http.request(builder)
 
             if (response.status.isSuccess()) {
-                body = response.bodyAsText()
-
-                if (T::class == String::class) {
-                    return ApiResponse.Success(body as T)
-                }
-
-                ApiResponse.Success(json.decodeFromString<T>(body))
+                val result = response.body<T>()
+                ApiResponse.Success(result)
             } else {
-                body = try {
-                    response.bodyAsText()
-                } catch (e: Throwable) {
-                    null
-                }
-
-                ApiResponse.Error(ApiError(response.status, body))
+                ApiResponse.Error(ApiError(response.status, null))
             }
         } catch (e: Throwable) {
-            ApiResponse.Failure(ApiFailure(e, body))
+            ApiResponse.Failure(ApiFailure(e, null))
         }
-
-        return response
     }
 
 }
