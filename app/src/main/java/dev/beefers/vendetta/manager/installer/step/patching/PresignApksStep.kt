@@ -1,6 +1,9 @@
 package dev.beefers.vendetta.manager.installer.step.patching
 
 import android.os.Build
+import com.github.diamondminer88.zip.ZipCompression
+import com.github.diamondminer88.zip.ZipReader
+import com.github.diamondminer88.zip.ZipWriter
 import dev.beefers.vendetta.manager.R
 import dev.beefers.vendetta.manager.installer.step.Step
 import dev.beefers.vendetta.manager.installer.step.StepGroup
@@ -11,10 +14,6 @@ import dev.beefers.vendetta.manager.installer.step.download.DownloadLibsStep
 import dev.beefers.vendetta.manager.installer.step.download.DownloadResourcesStep
 import dev.beefers.vendetta.manager.installer.util.Signer
 import java.io.File
-import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
 
 class PresignApksStep(
     private val signedDir: File
@@ -29,36 +28,33 @@ class PresignApksStep(
         val langApk = runner.getCompletedStep<DownloadLangStep>().workingCopy
         val resApk = runner.getCompletedStep<DownloadResourcesStep>().workingCopy
 
+        runner.logger.i("Creating dir for signed apks: ${signedDir.absolutePath}")
         signedDir.mkdirs()
         val apks = listOf(baseApk, libsApk, langApk, resApk)
 
         if (Build.VERSION.SDK_INT >= 30) {
             for (file in apks) {
-                val tempFile = File(file.parent, file.name + ".aligned")
-                val buffer = ByteArray(128 * 1024)
-                
-                try {
-                    ZipFile(file).use { zipFile ->
-                        ZipOutputStream(FileOutputStream(tempFile)).use { zos ->
-                            val entries = zipFile.entries()
-                            while (entries.hasMoreElements()) {
-                                val entry = entries.nextElement()
-                                val newEntry = ZipEntry(entry.name)
-                                zos.putNextEntry(newEntry)
-                                zipFile.getInputStream(entry).use { it.copyTo(zos) }
-                                zos.closeEntry()
-                            }
-                        }
+                runner.logger.i("Byte aligning ${file.name}")
+                val bytes = ZipReader(file).use {
+                    if (it.entryNames.contains("resources.arsc")) {
+                        it.openEntry("resources.arsc")?.read()
+                    } else {
+                        null
                     }
-                    file.delete()
-                    tempFile.renameTo(file)
-                } catch (e: Exception) {
-                    tempFile.delete()
+                } ?: continue
+
+                ZipWriter(file, true).use {
+                    runner.logger.i("Removing old resources.arsc")
+                    it.deleteEntry("resources.arsc", true)
+
+                    runner.logger.i("Adding aligned resources.arsc")
+                    it.writeEntry("resources.arsc", bytes, ZipCompression.NONE, 4096)
                 }
             }
         }
 
         apks.forEach {
+            runner.logger.i("Signing ${it.name}")
             Signer.signApk(it, File(signedDir, it.name))
         }
     }
