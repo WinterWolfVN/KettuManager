@@ -33,10 +33,7 @@ object AxmlUtil {
 
     private fun XmlChunk.getStartElementChunk(name: String): XmlStartElementChunk? {
         val nameIdx = this.stringPool.indexOf(name)
-
-        return this.chunks
-            .find { it is XmlStartElementChunk && it.nameIndex == nameIdx }
-            as? XmlStartElementChunk
+        return this.chunks.filterIsInstance<XmlStartElementChunk>().find { it.nameIndex == nameIdx }
     }
 
     private fun XmlStartElementChunk.getAttribute(name: String): XmlAttribute {
@@ -166,7 +163,8 @@ object AxmlUtil {
         val applicationStringIdx = mainChunk.stringPool.indexOf("application")
 
         val applicationChunk = mainChunk.chunks
-            .find { it is XmlStartElementChunk && (it as XmlStartElementChunk).nameIndex == applicationStringIdx } as? XmlStartElementChunk
+            .filterIsInstance<XmlStartElementChunk>()
+            .find { it.nameIndex == applicationStringIdx }
             ?: error("Unable to find <application> in manifest")
 
         val squareIcon = applicationChunk.attributes
