@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,21 +50,37 @@ class InstallManager(
 
     fun uninstall() {
         current?.let {
-            val callbackIntent = Intent(context, InstallService::class.java).apply {
-                action = "vendetta.actions.ACTION_UNINSTALL"
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val callbackIntent = Intent(context, InstallService::class.java).apply {
+                    action = "vendetta.actions.ACTION_UNINSTALL"
+                }
 
-            @SuppressLint("UnspecifiedImmutableFlag")
-            val contentIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.getService(context, 0, callbackIntent, PendingIntent.FLAG_MUTABLE)
+                @SuppressLint("UnspecifiedImmutableFlag")
+                val contentIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    PendingIntent.getService(context, 0, callbackIntent, PendingIntent.FLAG_MUTABLE)
+                } else {
+                    PendingIntent.getService(context, 0, callbackIntent, 0)
+                }
+
+                try {
+                    context.packageManager.packageInstaller.uninstall(
+                        it.packageName,
+                        contentIntent.intentSender
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             } else {
-                PendingIntent.getService(context, 0, callbackIntent, 0)
+                val intent = Intent(Intent.ACTION_DELETE).apply {
+                    data = Uri.parse("package:${it.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                try {
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
             }
-
-            context.packageManager.packageInstaller.uninstall(
-                it.packageName,
-                contentIntent.intentSender
-            )
         }
     }
 }
