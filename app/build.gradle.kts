@@ -102,7 +102,7 @@ dependencies {
     implementation(libs.bundles.koin)
     
     implementation(libs.bundles.ktor)
-    implementation("io.ktor:client-okhttp:2.3.12")
+    implementation("io.ktor:ktor-client-okhttp:$ktor_version")
     
     implementation(libs.bundles.shizuku)
     implementation(libs.bundles.voyager)
