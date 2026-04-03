@@ -33,14 +33,14 @@ object AxmlUtil {
 
     private fun XmlChunk.getStartElementChunk(name: String): XmlStartElementChunk? {
         val nameIdx = this.stringPool.indexOf(name)
-        return this.chunks.filterIsInstance<XmlStartElementChunk>().find { it.nameIndex == nameIdx }
+        val elements: List<XmlStartElementChunk> = this.chunks.filterIsInstance<XmlStartElementChunk>()
+        return elements.firstOrNull { element -> element.nameIndex == nameIdx }
     }
 
     private fun XmlStartElementChunk.getAttribute(name: String): XmlAttribute {
         val nameIdx = (this.parent as XmlChunk).stringPool.indexOf(name)
-
-        return this.attributes
-            .find { it.nameIndex() == nameIdx }
+        val attrs: List<XmlAttribute> = this.attributes
+        return attrs.firstOrNull { attr -> attr.nameIndex() == nameIdx }
             ?: error("Failed to find $name attribute in an axml chunk")
     }
 
@@ -81,10 +81,11 @@ object AxmlUtil {
                     BinaryResourceValue.Type.REFERENCE,
                     monochromeIcon.resourceId(),
                 )
-            }
-            else {
-                val iconEndChunkIdx = xmlChunk.chunks
-                    .indexOfLast { it is XmlEndElementChunk && (it as XmlEndElementChunk).name == "adaptive-icon" }
+            } else {
+                val allChunks: List<Chunk> = xmlChunk.chunks.toList()
+                val iconEndChunkIdx = allChunks.indexOfLast { chunk ->
+                    chunk is XmlEndElementChunk && chunk.name == "adaptive-icon"
+                }
 
                 val namespaceIdx = xmlChunk.stringPool.indexOf("http://schemas.android.com/apk/res/android")
                 val drawableIdx = xmlChunk.stringPool.indexOf("drawable")
@@ -127,12 +128,12 @@ object AxmlUtil {
 
         ZipInputStream(FileInputStream(apk).buffered(128 * 1024)).use { zis ->
             ZipOutputStream(FileOutputStream(tempFile).buffered(128 * 1024)).use { zos ->
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    val newEntry = ZipEntry(entry.name)
+                var zipEntry = zis.nextEntry
+                while (zipEntry != null) {
+                    val newEntry = ZipEntry(zipEntry.name)
                     zos.putNextEntry(newEntry)
-                    
-                    if (entry.name == resourcePath) {
+
+                    if (zipEntry.name == resourcePath) {
                         zos.write(patchedData)
                     } else {
                         var len: Int
@@ -142,7 +143,7 @@ object AxmlUtil {
                     }
                     zos.closeEntry()
                     zis.closeEntry()
-                    entry = zis.nextEntry
+                    zipEntry = zis.nextEntry
                 }
             }
         }
@@ -162,18 +163,19 @@ object AxmlUtil {
         val roundIconStringIdx = mainChunk.stringPool.indexOf("roundIcon")
         val applicationStringIdx = mainChunk.stringPool.indexOf("application")
 
-        val applicationChunk = mainChunk.chunks
-            .filterIsInstance<XmlStartElementChunk>()
-            .find { it.nameIndex == applicationStringIdx }
-            ?: error("Unable to find <application> in manifest")
+        val allElements: List<XmlStartElementChunk> = mainChunk.chunks.filterIsInstance<XmlStartElementChunk>()
 
-        val squareIcon = applicationChunk.attributes
-            .find { it.nameIndex() == iconStringIdx }
-            ?: error("Unable to find android:icon in manifest")
+        val applicationChunk: XmlStartElementChunk = allElements.firstOrNull { element ->
+            element.nameIndex == applicationStringIdx
+        } ?: error("Unable to find <application> in manifest")
 
-        val roundIcon = applicationChunk.attributes
-            .find { it.nameIndex() == roundIconStringIdx }
-            ?: error("Unable to find android:roundIcon in manifest")
+        val squareIcon: XmlAttribute = applicationChunk.attributes.firstOrNull { attr ->
+            attr.nameIndex() == iconStringIdx
+        } ?: error("Unable to find android:icon in manifest")
+
+        val roundIcon: XmlAttribute = applicationChunk.attributes.firstOrNull { attr ->
+            attr.nameIndex() == roundIconStringIdx
+        } ?: error("Unable to find android:roundIcon in manifest")
 
         return ManifestIconInfo(
             squareIcon = BinaryResourceIdentifier.create(squareIcon.typedValue().data()),
