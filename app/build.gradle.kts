@@ -15,7 +15,7 @@ android {
     defaultConfig {
         applicationId = "cocobo1.pupu.manager"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1220
         versionName = "1.2.2"
 
@@ -70,10 +70,8 @@ android {
     androidComponents {
         onVariants(selector().withBuildType("release")) {
             it.packaging.resources.excludes.apply {
-                // Debug metadata
                 add("/**/*.version")
                 add("/kotlin-tooling-metadata.json")
-                // Kotlin debugging (https://github.com/Kotlin/kotlinx.coroutines/issues/2274)
                 add("/DebugProbesKt.bin")
             }
         }
@@ -81,8 +79,8 @@ android {
 
     packaging {
         resources {
-            // Reflection symbol list (https://stackoverflow.com/a/41073782/13964629)
             excludes += "/**/*.kotlin_builtins"
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 
@@ -102,7 +100,10 @@ dependencies {
     implementation(libs.bundles.coil)
     implementation(libs.bundles.compose)
     implementation(libs.bundles.koin)
+    
     implementation(libs.bundles.ktor)
+    implementation("io.ktor:client-okhttp:2.3.12")
+    
     implementation(libs.bundles.shizuku)
     implementation(libs.bundles.voyager)
 
@@ -110,18 +111,17 @@ dependencies {
 
     implementation(libs.aboutlibraries.core)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
+    
     implementation(libs.binaryResources) {
         exclude(module = "checker-qual")
         exclude(module = "jsr305")
         exclude(module = "guava")
     }
+    
     implementation(libs.kotlinx.datetime)
     implementation(libs.kotlinx.collections)
-    implementation(libs.zip.android) {
-        artifact {
-            type = "aar"
-        }
-    }
+    
+    implementation("com.squareup.okio:okio:3.9.0")
 }
 
 fun getCurrentBranch(): String? =
@@ -143,19 +143,16 @@ fun exec(vararg command: String): String? {
         val stdout = ByteArrayOutputStream()
         val errout = ByteArrayOutputStream()
 
-        exec {
+        project.exec {
             commandLine = command.toList()
             standardOutput = stdout
             errorOutput = errout
             isIgnoreExitValue = true
         }
 
-        if(errout.size() > 0)
-            throw Error(errout.toString(Charsets.UTF_8))
-
-        stdout.toString(Charsets.UTF_8).trim()
+        if (errout.size() > 0) null
+        else stdout.toString(Charsets.UTF_8).trim()
     } catch (e: Throwable) {
-        e.printStackTrace()
         null
     }
 }
