@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "cocobo1.pupu.manager"
-        minSdk = 28
+        minSdk = 24
         targetSdk = 36
         versionCode = 1220
         versionName = "1.2.2"
@@ -43,12 +43,13 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = "21"
+        jvmTarget = "17"
         freeCompilerArgs += listOf(
             "-Xcontext-receivers",
             "-P",
@@ -108,6 +109,7 @@ dependencies {
     implementation(files("libs/lspatch.aar"))
 
     implementation(libs.aboutlibraries.core)
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(libs.binaryResources) {
         exclude(module = "checker-qual")
         exclude(module = "jsr305")
