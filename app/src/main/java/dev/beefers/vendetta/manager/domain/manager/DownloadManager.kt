@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 class DownloadManager(
     private val context: Context,
-    private val preferences: PreferenceManager
+    private val prefs: PreferenceManager
 ) {
     private val httpClient = OkHttpClient.Builder()
         .connectionPool(ConnectionPool(15, 5, TimeUnit.MINUTES))
@@ -19,11 +19,24 @@ class DownloadManager(
         .retryOnConnectionFailure(true)
         .build()
 
-    suspend fun downloadDiscordApk(version: String, out: File, onProgressUpdate: (Float?) -> Unit) =
-        download("${preferences.mirror.baseUrl}/tracker/download/$version/base", out, onProgressUpdate)
+    suspend fun downloadDiscordApk(version: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
+        download("${prefs.mirror.baseUrl}/tracker/download/$version/base", out, onProgressUpdate)
 
-    suspend fun downloadSplit(version: String, split: String, out: File, onProgressUpdate: (Float?) -> Unit) =
-        download("${preferences.mirror.baseUrl}/tracker/download/$version/$split", out, onProgressUpdate)
+    suspend fun downloadSplit(version: String, split: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
+        download("${prefs.mirror.baseUrl}/tracker/download/$version/$split", out, onProgressUpdate)
+
+    suspend fun downloadVendetta(out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
+        download(
+            "https://github.com/C0C0B01/KettuXposed/releases/latest/download/app-release.apk",
+            out,
+            onProgressUpdate
+        )
+
+    suspend fun downloadUpdate(out: File): DownloadResult =
+        download(
+            "https://github.com/C0C0B01/KettuManager/releases/latest/download/Manager.apk",
+            out
+        ) {}
 
     suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult = withContext(Dispatchers.IO) {
         if (out.exists()) out.delete()
@@ -34,7 +47,7 @@ class DownloadManager(
             try {
                 val request = Request.Builder().url(url).build()
                 val response = httpClient.newCall(request).execute()
-                
+
                 if (!response.isSuccessful) {
                     response.close()
                     retryCount++
@@ -54,7 +67,7 @@ class DownloadManager(
                             if (totalSize > 0) onProgressUpdate(downloaded.toFloat() / totalSize.toFloat())
                         }
                     }
-                    
+
                     if (totalSize > 0 && downloaded < totalSize) {
                         out.delete()
                         retryCount++
@@ -62,6 +75,9 @@ class DownloadManager(
                         return@withContext DownloadResult.Success
                     }
                 }
+            } catch (e: CancellationException) {
+                if (out.exists()) out.delete()
+                return@withContext DownloadResult.Cancelled(false)
             } catch (e: Exception) {
                 retryCount++
                 if (out.exists()) out.delete()
