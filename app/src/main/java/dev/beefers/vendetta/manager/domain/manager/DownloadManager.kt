@@ -1,18 +1,24 @@
 package dev.beefers.vendetta.manager.domain.manager
 
-import android.app.DownloadManager as SystemDownloadManager
 import android.content.Context
-import android.database.Cursor
-import android.net.Uri
-import androidx.core.content.getSystemService
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 class DownloadManager(
     private val context: Context,
     private val prefs: PreferenceManager
 ) {
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     suspend fun downloadDiscordApk(version: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult =
         download("${prefs.mirror.baseUrl}/tracker/download/$version/base", out, onProgressUpdate)
@@ -37,86 +43,56 @@ class DownloadManager(
         url: String,
         out: File,
         onProgressUpdate: (Float?) -> Unit
-    ): DownloadResult {
-        val downloadManager = context.getSystemService<SystemDownloadManager>()
-            ?: throw IllegalStateException("DownloadManager service is not available")
+    ): DownloadResult = withContext(Dispatchers.IO) {
+        try {
+            onProgressUpdate(null)
 
-        val downloadId = SystemDownloadManager.Request(Uri.parse(url))
-            .setTitle("Kettu Manager")
-            .setDescription("Downloading ${out.name}...")
-            .setDestinationUri(Uri.fromFile(out))
-            .setNotificationVisibility(SystemDownloadManager.Request.VISIBILITY_VISIBLE)
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
-            .let(downloadManager::enqueue)
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
 
-        while (true) {
-            try {
-                delay(100)
-            } catch (_: CancellationException) {
-                downloadManager.remove(downloadId)
-                return DownloadResult.Cancelled(systemTriggered = false)
+            if (!response.isSuccessful) {
+                return@withContext DownloadResult.Error("HTTP_ERROR_${response.code}")
             }
 
-            val cursor = SystemDownloadManager.Query()
-                .setFilterById(downloadId)
-                .let(downloadManager::query)
+            val body = response.body ?: return@withContext DownloadResult.Error("EMPTY_BODY")
+            val totalBytes = body.contentLength()
+            var downloadedBytes = 0L
+            var lastUpdateTime = System.currentTimeMillis()
 
-            if (!cursor.moveToFirst()) {
-                cursor.close()
-                return DownloadResult.Cancelled(systemTriggered = true)
-            }
+            body.byteStream().use { input ->
+                out.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
+                    var bytes = input.read(buffer)
+                    while (bytes >= 0) {
+                        if (!isActive) {
+                            out.delete()
+                            return@withContext DownloadResult.Cancelled(false)
+                        }
 
-            val statusColumn = cursor.getColumnIndex(SystemDownloadManager.COLUMN_STATUS)
-            val status = cursor.getInt(statusColumn)
+                        output.write(buffer, 0, bytes)
+                        downloadedBytes += bytes
 
-            cursor.use {
-                when (status) {
-                    SystemDownloadManager.STATUS_PENDING, SystemDownloadManager.STATUS_PAUSED ->
-                        onProgressUpdate(null)
+                        if (totalBytes > 0) {
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastUpdateTime > 60 || downloadedBytes == totalBytes) {
+                                onProgressUpdate(downloadedBytes.toFloat() / totalBytes.toFloat())
+                                lastUpdateTime = currentTime
+                            }
+                        }
 
-                    SystemDownloadManager.STATUS_RUNNING ->
-                        onProgressUpdate(getDownloadProgress(cursor))
-
-                    SystemDownloadManager.STATUS_SUCCESSFUL ->
-                        return DownloadResult.Success
-
-                    SystemDownloadManager.STATUS_FAILED -> {
-                        val reasonColumn = cursor.getColumnIndex(SystemDownloadManager.COLUMN_REASON)
-                        val reason = cursor.getInt(reasonColumn)
-
-                        return DownloadResult.Error(debugReason = convertErrorCode(reason))
+                        bytes = input.read(buffer)
                     }
                 }
             }
+            DownloadResult.Success
+        } catch (e: CancellationException) {
+            out.delete()
+            DownloadResult.Cancelled(systemTriggered = false)
+        } catch (e: Exception) {
+            out.delete()
+            DownloadResult.Error(e.message ?: "UNKNOWN_ERROR")
         }
     }
-
-    private fun getDownloadProgress(queryCursor: Cursor): Float? {
-        val bytesColumn = queryCursor.getColumnIndex(SystemDownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-        val bytes = queryCursor.getLong(bytesColumn)
-
-        val totalBytesColumn = queryCursor.getColumnIndex(SystemDownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-        val totalBytes = queryCursor.getLong(totalBytesColumn)
-
-        if (totalBytes <= 0) return null
-        return bytes.toFloat() / totalBytes
-    }
-
-    private fun convertErrorCode(code: Int) = when (code) {
-        SystemDownloadManager.ERROR_UNKNOWN -> "UNKNOWN"
-        SystemDownloadManager.ERROR_FILE_ERROR -> "FILE_ERROR"
-        SystemDownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "UNHANDLED_HTTP_CODE"
-        SystemDownloadManager.ERROR_HTTP_DATA_ERROR -> "HTTP_DATA_ERROR"
-        SystemDownloadManager.ERROR_TOO_MANY_REDIRECTS -> "TOO_MANY_REDIRECTS"
-        SystemDownloadManager.ERROR_INSUFFICIENT_SPACE -> "INSUFFICIENT_SPACE"
-        SystemDownloadManager.ERROR_DEVICE_NOT_FOUND -> "DEVICE_NOT_FOUND"
-        SystemDownloadManager.ERROR_CANNOT_RESUME -> "CANNOT_RESUME"
-        SystemDownloadManager.ERROR_FILE_ALREADY_EXISTS -> "FILE_ALREADY_EXISTS"
-        1010 -> "NETWORK_BLOCKED"
-        else -> "UNKNOWN_CODE"
-    }
-
 }
 
 sealed interface DownloadResult {
