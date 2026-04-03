@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -47,15 +48,15 @@ class ManagerApplication : Application() {
     }
 
     private fun initNotificationChannels() {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
-        val updates = NotificationChannel(
-            "${BuildConfig.APPLICATION_ID}.notifications.UPDATE",
-            "Discord updates",
-            NotificationManager.IMPORTANCE_DEFAULT
-        )
-
-        nm.createNotificationChannel(updates)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val updates = NotificationChannel(
+                "${BuildConfig.APPLICATION_ID}.notifications.UPDATE",
+                "Discord updates",
+                NotificationManager.IMPORTANCE_DEFAULT
+            )
+            nm.createNotificationChannel(updates)
+        }
     }
 
 }
