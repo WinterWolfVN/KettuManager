@@ -1,5 +1,7 @@
 package dev.beefers.vendetta.manager.installer.util
 
+import dev.beefers.vendetta.manager.utils.find
+import dev.beefers.vendetta.manager.utils.indexOfLast
 import com.google.devrel.gmscore.tools.apk.arsc.*
 import java.io.File
 import java.io.FileInputStream
@@ -31,22 +33,16 @@ object AxmlUtil {
 
     private fun XmlChunk.getStartElementChunk(name: String): XmlStartElementChunk? {
         val nameIdx = this.stringPool.indexOf(name)
-        for (chunk in this.chunks) {
-            if (chunk is XmlStartElementChunk && chunk.nameIndex == nameIdx) {
-                return chunk
-            }
-        }
-        return null
+        return this.chunks
+            .find { it is XmlStartElementChunk && it.nameIndex == nameIdx }
+            as? XmlStartElementChunk
     }
 
     private fun XmlStartElementChunk.getAttribute(name: String): XmlAttribute {
         val nameIdx = (this.parent as XmlChunk).stringPool.indexOf(name)
-        for (attr in this.attributes) {
-            if (attr.nameIndex() == nameIdx) {
-                return attr
-            }
-        }
-        error("Failed to find $name attribute in an axml chunk")
+        return this.attributes
+            .find { it.nameIndex() == nameIdx }
+            ?: error("Failed to find $name attribute in an axml chunk")
     }
 
     fun patchAdaptiveIcon(
@@ -87,20 +83,8 @@ object AxmlUtil {
                     monochromeIcon.resourceId(),
                 )
             } else {
-                var iconEndChunkIdx = -1
-                val chunksList = ArrayList<Chunk>()
-                for (chunk in xmlChunk.chunks) {
-                    chunksList.add(chunk)
-                }
-                for (i in chunksList.indices.reversed()) {
-                    if (chunksList[i] is XmlEndElementChunk) {
-                        val endChunk = chunksList[i] as XmlEndElementChunk
-                        if (endChunk.name == "adaptive-icon") {
-                            iconEndChunkIdx = i
-                            break
-                        }
-                    }
-                }
+                val iconEndChunkIdx = xmlChunk.chunks
+                    .indexOfLast { it is XmlEndElementChunk && it.name == "adaptive-icon" }
 
                 val namespaceIdx = xmlChunk.stringPool.indexOf("http://schemas.android.com/apk/res/android")
                 val drawableIdx = xmlChunk.stringPool.indexOf("drawable")
@@ -176,23 +160,17 @@ object AxmlUtil {
         val roundIconStringIdx = mainChunk.stringPool.indexOf("roundIcon")
         val applicationStringIdx = mainChunk.stringPool.indexOf("application")
 
-        var applicationChunk: XmlStartElementChunk? = null
-        for (chunk in mainChunk.chunks) {
-            if (chunk is XmlStartElementChunk && chunk.nameIndex == applicationStringIdx) {
-                applicationChunk = chunk
-                break
-            }
-        }
-        if (applicationChunk == null) error("Unable to find <application> in manifest")
+        val applicationChunk = mainChunk.chunks
+            .find { it is XmlStartElementChunk && it.nameIndex == applicationStringIdx } as? XmlStartElementChunk
+            ?: error("Unable to find <application> in manifest")
 
-        var squareIcon: XmlAttribute? = null
-        var roundIcon: XmlAttribute? = null
-        for (attr in applicationChunk.attributes) {
-            if (attr.nameIndex() == iconStringIdx) squareIcon = attr
-            if (attr.nameIndex() == roundIconStringIdx) roundIcon = attr
-        }
-        if (squareIcon == null) error("Unable to find android:icon in manifest")
-        if (roundIcon == null) error("Unable to find android:roundIcon in manifest")
+        val squareIcon = applicationChunk.attributes
+            .find { it.nameIndex() == iconStringIdx }
+            ?: error("Unable to find android:icon in manifest")
+
+        val roundIcon = applicationChunk.attributes
+            .find { it.nameIndex() == roundIconStringIdx }
+            ?: error("Unable to find android:roundIcon in manifest")
 
         return ManifestIconInfo(
             squareIcon = BinaryResourceIdentifier.create(squareIcon.typedValue().data()),
