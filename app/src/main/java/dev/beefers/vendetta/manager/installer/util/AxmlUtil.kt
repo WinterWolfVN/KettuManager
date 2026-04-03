@@ -1,22 +1,16 @@
 package dev.beefers.vendetta.manager.installer.util
 
 import dev.beefers.vendetta.manager.utils.find
-import dev.beefers.vendetta.manager.utils.indexOfLast
+import com.github.diamondminer88.zip.ZipReader
+import com.github.diamondminer88.zip.ZipWriter
 import com.google.devrel.gmscore.tools.apk.arsc.*
 import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 object AxmlUtil {
     private fun readAxml(apk: File, resourcePath: String): BinaryResourceFile {
-        val bytes = ZipFile(apk).use { zip ->
-            val entry = zip.getEntry(resourcePath) ?: error("APK missing resource file at $resourcePath")
-            zip.getInputStream(entry).readBytes()
-        }
+        val bytes = ZipReader(apk).use { it.openEntry(resourcePath)?.read() }
+            ?: error("APK missing resource file at $resourcePath")
+
         return try {
             BinaryResourceFile(bytes)
         } catch (t: Throwable) {
@@ -27,12 +21,14 @@ object AxmlUtil {
     private fun BinaryResourceFile.getMainAxmlChunk(): XmlChunk {
         if (this.chunks.size > 1)
             error("More than 1 top level chunk in axml")
+
         return this.chunks.first() as? XmlChunk
             ?: error("Invalid top-level axml chunk")
     }
 
     private fun XmlChunk.getStartElementChunk(name: String): XmlStartElementChunk? {
         val nameIdx = this.stringPool.indexOf(name)
+
         return this.chunks
             .find { it is XmlStartElementChunk && it.nameIndex == nameIdx }
             as? XmlStartElementChunk
@@ -40,6 +36,7 @@ object AxmlUtil {
 
     private fun XmlStartElementChunk.getAttribute(name: String): XmlAttribute {
         val nameIdx = (this.parent as XmlChunk).stringPool.indexOf(name)
+
         return this.attributes
             .find { it.nameIndex() == nameIdx }
             ?: error("Failed to find $name attribute in an axml chunk")
@@ -121,38 +118,15 @@ object AxmlUtil {
             }
         }
 
-        val tempFile = File(apk.parent, apk.name + ".tmp")
-        val buffer = ByteArray(128 * 1024)
-        val patchedData = xml.toByteArray()
-
-        ZipInputStream(FileInputStream(apk).buffered(128 * 1024)).use { zis ->
-            ZipOutputStream(FileOutputStream(tempFile).buffered(128 * 1024)).use { zos ->
-                var zipEntry = zis.nextEntry
-                while (zipEntry != null) {
-                    zos.putNextEntry(ZipEntry(zipEntry.name))
-                    if (zipEntry.name == resourcePath) {
-                        zos.write(patchedData)
-                    } else {
-                        var len: Int
-                        while (zis.read(buffer).also { len = it } > 0) {
-                            zos.write(buffer, 0, len)
-                        }
-                    }
-                    zos.closeEntry()
-                    zis.closeEntry()
-                    zipEntry = zis.nextEntry
-                }
-            }
+        ZipWriter(apk, true).use { zip ->
+            zip.deleteEntry(resourcePath)
+            zip.writeEntry(resourcePath, xml.toByteArray())
         }
-        apk.delete()
-        tempFile.renameTo(apk)
     }
 
     fun readManifestIconInfo(apk: File): ManifestIconInfo {
-        val manifestBytes = ZipFile(apk).use { zip ->
-            val entry = zip.getEntry("AndroidManifest.xml") ?: error("APK missing manifest")
-            zip.getInputStream(entry).readBytes()
-        }
+        val manifestBytes = ZipReader(apk).use { it.openEntry("AndroidManifest.xml")?.read() }
+            ?: error("APK missing manifest")
         val manifest = BinaryResourceFile(manifestBytes)
         val mainChunk = manifest.getMainAxmlChunk()
 
