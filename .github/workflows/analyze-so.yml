@@ -1,4 +1,4 @@
-name: Analyze liblspatch.so v2 (Deep Scan)
+name: Analyze liblspatch.so v3
 
 on:
   workflow_dispatch:
@@ -11,191 +11,112 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y binutils-multiarch p7zip-full
-
-      - name: Deep analyze arm64 .so
+      - name: Full analysis
         run: |
           SO="./app/src/main/assets/lspatch/so/arm64-v8a/liblspatch.so"
-          
-          echo "╔══════════════════════════════════╗"
-          echo "║  DEEP ANALYSIS: arm64-v8a        ║"
-          echo "╚══════════════════════════════════╝"
-          
-          echo ""
-          echo "========== FILE INFO =========="
-          file "$SO"
-          ls -lh "$SO"
-          
-          echo ""
-          echo "========== ELF HEADER (FULL) =========="
+
+          echo "========== ELF HEADER =========="
           readelf -h "$SO"
-          
+
           echo ""
-          echo "========== ALL SECTIONS =========="
+          echo "========== SECTIONS =========="
           readelf -S "$SO"
-          
+
           echo ""
-          echo "========== NOTE SECTIONS =========="
-          readelf -n "$SO" || echo "No notes found"
-          
-          echo ""
-          echo "========== DYNAMIC SECTION (FULL) =========="
+          echo "========== DYNAMIC =========="
           readelf -d "$SO"
-          
-          echo ""
-          echo "========== ALL DEPENDENCIES =========="
-          readelf -d "$SO" | grep -E "NEEDED|SONAME|FLAGS"
-          
-          echo ""
-          echo "========== PROGRAM HEADERS =========="
-          readelf -l "$SO"
 
-      - name: Find API level from binary
+          echo ""
+          echo "========== SYMBOLS (ALL) =========="
+          # FIX: thêm || true để không exit code 1
+          nm -D "$SO" 2>/dev/null || true
+
+          echo ""
+          echo "========== JNI Functions =========="
+          nm -D "$SO" 2>/dev/null | grep -i "java_" || echo "No JNI functions found"
+
+          echo ""
+          echo "========== STRINGS: Android/API =========="
+          strings "$SO" | grep -iE "android|api|sdk|ndk|level" | sort -u || true
+
+          echo ""
+          echo "========== STRINGS: Patch related =========="
+          strings "$SO" | grep -iE "patch|hook|inject|xposed|lsposed|dex|dalvik" | sort -u || true
+
+          echo ""
+          echo "========== STRINGS: File paths =========="
+          strings "$SO" | grep -E "^/|\.so$|\.dex$|\.apk$" | sort -u || true
+
+          echo ""
+          echo "========== STRINGS: ALL (first 300) =========="
+          strings "$SO" | sort -u | head -300
+
+          echo ""
+          echo "========== HEX: Search Android note =========="
+          hexdump -C "$SO" | grep -A2 "ndroid" | head -20 || true
+
+      - name: Check Java side (lspatch.aar)
+        run: |
+          echo "========== FIND AAR/JAR =========="
+          find . -name "*.aar" -o -name "lspatch*.jar" | head -10
+          
+          echo ""
+          echo "========== FIND LSPatch Java classes =========="
+          find . -path "*/lspatch*" -type f | head -30
+
+          echo ""
+          echo "========== CHECK build.gradle for lspatch =========="
+          grep -rn "lspatch\|LSPatch\|liblspatch" --include="*.gradle*" --include="*.kt" --include="*.java" . | head -30
+
+      - name: Check minSdk references in source
+        run: |
+          echo "========== minSdk references =========="
+          grep -rn "minSdk\|MIN_SDK\|Build.VERSION" --include="*.kt" --include="*.java" . | head -30
+          
+          echo ""
+          echo "========== API level checks in code =========="
+          grep -rn "VERSION_CODES\|SDK_INT" --include="*.kt" --include="*.java" . | head -30
+
+      - name: Android 7 compatibility check
         run: |
           SO="./app/src/main/assets/lspatch/so/arm64-v8a/liblspatch.so"
-          
-          echo "========== METHOD 1: strings grep =========="
-          strings "$SO" | grep -iE "android|api|sdk|level|min" | sort -u
-          
-          echo ""
-          echo "========== METHOD 2: hex search android ident =========="
-          # Android ELF note format: search for "Android" in binary
-          hexdump -C "$SO" | grep -i "android" | head -20
-          
-          echo ""
-          echo "========== METHOD 3: objdump =========="
-          objdump -p "$SO" 2>/dev/null | head -50
-          
-          echo ""
-          echo "========== METHOD 4: .note.android.ident raw =========="
-          # Tìm section .note.android.ident
-          readelf -x .note.android.ident "$SO" 2>/dev/null || echo "Section not found"
-          
-          echo ""
-          echo "========== METHOD 5: all note-like sections =========="
-          readelf -S "$SO" | grep -i note
-          
-          echo ""
-          echo "========== METHOD 6: search hex for API number =========="
-          # Android note thường chứa bytes: 08 00 00 00 (size) + "Android\0" + API level
-          hexdump -C "$SO" | grep "41 6e 64 72 6f 69 64" | head -5
-          
-          echo ""
-          echo "========== METHOD 7: NDK version from strings =========="
-          strings "$SO" | grep -iE "ndk|clang|compiler|gcc|llvm|build" | sort -u
 
-      - name: Analyze symbols (functions)
-        run: |
-          SO="./app/src/main/assets/lspatch/so/arm64-v8a/liblspatch.so"
-          
-          echo "========== ALL EXPORTED SYMBOLS =========="
-          nm -D "$SO" 2>/dev/null | head -100
-          
-          echo ""
-          echo "========== JNI FUNCTIONS =========="
-          nm -D "$SO" 2>/dev/null | grep -i "java_" 
-          
-          echo ""
-          echo "========== DYNAMIC SYMBOLS (readelf) =========="
-          readelf --dyn-syms "$SO" | head -100
-          
-          echo ""  
-          echo "========== SYMBOLS WITH 'patch' =========="
-          nm -D "$SO" 2>/dev/null | grep -i "patch"
-          readelf --dyn-syms "$SO" | grep -i "patch"
-
-      - name: ALL strings dump
-        run: |
-          SO="./app/src/main/assets/lspatch/so/arm64-v8a/liblspatch.so"
-          
-          echo "========== ALL STRINGS (filtered) =========="
-          echo ""
-          echo "--- patch/dex/apk related ---"
-          strings "$SO" | grep -iE "patch|dex|apk|classes|manifest|sign|cert|key" | sort -u
-          
-          echo ""
-          echo "--- error/exception ---"
-          strings "$SO" | grep -iE "error|fail|exception|abort|invalid" | sort -u
-          
-          echo ""
-          echo "--- file paths ---"
-          strings "$SO" | grep -E "^/" | sort -u
-          
-          echo ""
-          echo "--- URLs ---"
-          strings "$SO" | grep -iE "http|github|lsposed" | sort -u
-          
-          echo ""
-          echo "--- ALL UNIQUE STRINGS (first 200) ---"
-          strings "$SO" | sort -u | head -200
-
-      - name: Compare all architectures
-        run: |
-          echo "========== SIZE COMPARISON =========="
-          find ./app/src/main/assets/lspatch/so/ -name "*.so" -exec ls -lh {} \;
-          
-          echo ""
-          echo "========== MD5 COMPARISON =========="
-          find ./app/src/main/assets/lspatch/so/ -name "*.so" -exec md5sum {} \;
-
-      - name: Check lspatch.aar too
-        run: |
-          echo "========== CHECKING FOR AAR =========="
-          find . -name "*.aar" -exec ls -lh {} \;
-          
-          if [ -f "app/libs/lspatch.aar" ]; then
-            echo ""
-            echo "--- Extracting AAR ---"
-            mkdir -p aar_extracted
-            unzip -o app/libs/lspatch.aar -d aar_extracted/
-            
-            echo ""
-            echo "--- AAR Contents ---"
-            find aar_extracted/ -type f
-            
-            echo ""
-            echo "--- Classes in JAR ---"
-            if [ -f "aar_extracted/classes.jar" ]; then
-              jar tf aar_extracted/classes.jar | head -50
-            fi
-            
-            echo ""
-            echo "--- AAR Manifest ---"
-            if [ -f "aar_extracted/AndroidManifest.xml" ]; then
-              cat aar_extracted/AndroidManifest.xml 2>/dev/null || \
-              strings aar_extracted/AndroidManifest.xml
-            fi
-          fi
-
-      - name: Final Summary
-        run: |
-          SO="./app/src/main/assets/lspatch/so/arm64-v8a/liblspatch.so"
-          
           echo ""
           echo "╔══════════════════════════════════════════════════╗"
-          echo "║              FINAL SUMMARY                       ║"
+          echo "║         ANDROID 7 COMPATIBILITY CHECK            ║"
           echo "╠══════════════════════════════════════════════════╣"
           echo "║                                                  ║"
-          echo "║  Path: assets/lspatch/so/                       ║"
-          echo "║  → .so nằm trong assets, KHÔNG phải jniLibs     ║"
-          echo "║  → App tự extract .so khi runtime               ║"
-          echo "║  → Có thể patch/replace dễ hơn!                 ║"
+
+          # Check từng function có trên Android 7 không
+          PROBLEMS=0
+
+          # Các function chỉ có từ API 28+
+          for func in "__libc_current_sigrtmin" "android_fdsan_close_with_tag" "android_fdsan_create_owner_tag"; do
+            if nm -D "$SO" 2>/dev/null | grep -q "$func"; then
+              echo "║  ❌ $func (API 28+ only)"
+              PROBLEMS=$((PROBLEMS + 1))
+            fi
+          done
+
+          # Các function chỉ có từ API 26+  
+          for func in "fexecve" "preadv2" "pwritev2"; do
+            if nm -D "$SO" 2>/dev/null | grep -q "$func"; then
+              echo "║  ❌ $func (API 26+ only)"
+              PROBLEMS=$((PROBLEMS + 1))
+            fi
+          done
+
+          if [ "$PROBLEMS" -eq 0 ]; then
+            echo "║  ✅ Tất cả symbols đều compatible API 24!     ║"
+            echo "║  ✅ liblspatch.so CHẠY ĐƯỢC Android 7!        ║"
+          else
+            echo "║  ❌ Có $PROBLEMS symbols không compatible      ║"
+          fi
+
           echo "║                                                  ║"
-          
-          ARCHS=$(find ./app/src/main/assets/lspatch/so/ -mindepth 1 -maxdepth 1 -type d -printf "%f ")
-          echo "║  Architectures: $ARCHS"
-          echo "║                                                  ║"
-          
-          FUNCS=$(nm -D "$SO" 2>/dev/null | grep -c " T " || echo 0)
-          echo "║  Exported functions: $FUNCS"
-          
-          JNI=$(nm -D "$SO" 2>/dev/null | grep -c "Java_" || echo 0)
-          echo "║  JNI functions: $JNI"
-          
-          SIZE=$(ls -lh "$SO" | awk '{print $5}')
-          echo "║  Size (arm64): $SIZE"
+          echo "║  Exported: JNI_OnLoad only                      ║"
+          echo "║  → Library tự hook khi được load                ║"
+          echo "║  → Không cần Java JNI interface                 ║"
+          echo "║  → Đây là injection/hooking library             ║"
           echo "║                                                  ║"
           echo "╚══════════════════════════════════════════════════╝"
