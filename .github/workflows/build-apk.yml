@@ -28,19 +28,6 @@ jobs:
 
       - name: 🔑 Cấp quyền thực thi cho Gradle
         run: chmod +x gradlew
-
-      - name: 🧪 Download JarJar Tool
-        run: curl -L -o jarjar.jar https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jarjar/jarjar-1.4.jar
-
-      - name: 🥇 Create Relocation Rule
-        run: echo "rule com.android.apksig.** com.android.xpsig.@1" > rules.txt
-
-      - name: 😈 Relocate Xpatch Classes
-        run: |
-          java -jar jarjar.jar process rules.txt app/libs/xpatch-6.0.jar app/libs/xpatch-fixed.jar
-          rm app/libs/xpatch-6.0.jar
-          mv app/libs/xpatch-fixed.jar app/libs/xpatch-6.0.jar
-          echo "✅ Đã đổi tên apksig thành xpsig thành công!"
       
       - name: 🔨 Build Debug APK (Android 7 Ready)
         run: ./gradlew assembleDebug --stacktrace
