@@ -59,7 +59,10 @@ abstract class DownloadStep : Step() {
 
     override suspend fun run(runner: StepRunner) {
         val fileName = destination.name
-
+        
+        destination.parentFile?.mkdirs() 
+        workingCopy.parentFile?.mkdirs()
+        
         if (destination.exists()) {
             try {
                 verify()
