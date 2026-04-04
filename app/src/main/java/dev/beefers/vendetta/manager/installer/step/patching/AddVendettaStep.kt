@@ -32,7 +32,7 @@ class AddVendettaStep(
     override val group = StepGroup.PATCHING
     override val nameRes = R.string.step_add_vd
 
-    private val npatchUrl = "https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar"
+    private val npatchUrl = "https://github.com/WinterWolfVN/KettuManager/blob/main/app/libs/jar-v0.8.0-538-release.jar"
 
     private val modernTlsSpec = ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
         .tlsVersions(TlsVersion.TLS_1_2)
