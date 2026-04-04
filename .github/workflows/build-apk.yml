@@ -30,7 +30,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: 🧪 Download JarJar Tool
-        run: wget https://github.com/shevek/jarjar/releases/download/v1.9.0/jarjar-1.9.0.jar -O jarjar.jar
+        run: curl -L -o jarjar.jar https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/jarjar/jarjar-1.4.jar
 
       - name: 🥇 Create Relocation Rule
         run: echo "rule com.android.apksig.** com.android.xpsig.@1" > rules.txt
