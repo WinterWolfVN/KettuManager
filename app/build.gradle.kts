@@ -106,7 +106,6 @@ dependencies {
     implementation(libs.bundles.voyager)
 
     implementation(files("libs/lspatch.aar"))
-    implementation(files("libs/xpatch-6.0.jar"))
 
     implementation(libs.aboutlibraries.core)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
