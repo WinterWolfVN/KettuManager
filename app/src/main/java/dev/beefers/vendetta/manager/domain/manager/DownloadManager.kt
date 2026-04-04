@@ -38,55 +38,65 @@ class DownloadManager(
             out
         ) {}
 
-    suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult = withContext(Dispatchers.IO) {
-        if (out.exists()) out.delete()
-        var retryCount = 0
-        var finalResult: DownloadResult = DownloadResult.Error("TIMEOUT")
+suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit): DownloadResult = withContext(Dispatchers.IO) {
+    if (out.exists()) out.delete()
+    var retryCount = 0
+    var finalResult: DownloadResult = DownloadResult.Error("TIMEOUT")
 
-        while (retryCount < 3 && isActive) {
-            try {
-                val request = Request.Builder().url(url).build()
-                val response = httpClient.newCall(request).execute()
+    while (retryCount < 3 && isActive) {
+        try {
+            val request = Request.Builder().url(url).build()
+            val response = httpClient.newCall(request).execute()
 
-                if (!response.isSuccessful) {
-                    response.close()
-                    retryCount++
-                    delay(1000)
-                } else {
-                    val body = response.body ?: throw Exception("Empty")
-                    val totalSize = body.contentLength()
-                    var downloaded = 0L
+            if (!response.isSuccessful) {
+                response.close()
+                retryCount++
+                delay(1000)
+            } else {
+                val body = response.body ?: throw Exception("Empty")
+                val totalSize = body.contentLength()
+                var downloaded = 0L
+                var lastUpdateProgress = 0f
 
-                    out.sink().buffer().use { sink ->
-                        val source = body.source()
-                        while (isActive) {
-                            val read = source.read(sink.buffer, 64 * 1024L)
-                            if (read == -1L) break
-                            sink.emitCompleteSegments()
-                            downloaded += read
-                            if (totalSize > 0) onProgressUpdate(downloaded.toFloat() / totalSize.toFloat())
+                out.sink().buffer().use { sink ->
+                    val source = body.source()
+                    val chunkSize = 256 * 1024L
+                    
+                    while (isActive) {
+                        val read = source.read(sink.buffer, chunkSize)
+                        if (read == -1L) break
+                        
+                        sink.emitCompleteSegments()
+                        downloaded += read
+                        
+                        if (totalSize > 0) {
+                            val currentProgress = downloaded.toFloat() / totalSize.toFloat()
+                            if (currentProgress - lastUpdateProgress >= 0.1f || downloaded == totalSize) {
+                                onProgressUpdate(currentProgress)
+                                lastUpdateProgress = currentProgress
+                            }
                         }
                     }
-
-                    if (totalSize > 0 && downloaded < totalSize) {
-                        out.delete()
-                        retryCount++
-                    } else {
-                        return@withContext DownloadResult.Success
-                    }
                 }
-            } catch (e: CancellationException) {
-                if (out.exists()) out.delete()
-                return@withContext DownloadResult.Cancelled(false)
-            } catch (e: Exception) {
-                retryCount++
-                if (out.exists()) out.delete()
-                delay(1000)
-                finalResult = DownloadResult.Error(e.message ?: "FAIL")
+
+                if (totalSize > 0 && downloaded < totalSize) {
+                    out.delete()
+                    retryCount++
+                } else {
+                    return@withContext DownloadResult.Success
+                }
             }
+        } catch (e: CancellationException) {
+            if (out.exists()) out.delete()
+            return@withContext DownloadResult.Cancelled(false)
+        } catch (e: Exception) {
+            retryCount++
+            if (out.exists()) out.delete()
+            delay(1000)
+            finalResult = DownloadResult.Error(e.message ?: "FAIL")
         }
-        finalResult
     }
+    finalResult
 }
 
 sealed interface DownloadResult {
