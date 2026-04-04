@@ -32,7 +32,7 @@ class AddVendettaStep(
     override val group = StepGroup.PATCHING
     override val nameRes = R.string.step_add_vd
 
-    private val xpatchUrl = "https://github.com/WindySha/Xpatch/releases/download/v6.0/xpatch-6.0.jar"
+    private val npatchUrl = "https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar"
 
     private val modernTlsSpec = ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
         .tlsVersions(TlsVersion.TLS_1_2)
@@ -60,38 +60,43 @@ class AddVendettaStep(
                 listOf(vendetta.absolutePath)
             )
         } else {
-            val xpatchJar = File(context.cacheDir, "xpatch-6.0.jar")
+            val npatchJar = File(context.cacheDir, "npatch-0.8.0.jar")
 
-            if (!xpatchJar.exists()) {
-                runner.logger.i("Downloading Xpatch engine...")
-                downloadXpatch(xpatchJar)
+            if (!npatchJar.exists()) {
+                runner.logger.i("Downloading NPatch engine...")
+                downloadNPatch(npatchJar)
             }
 
             val baseApk = files.first { it.name.startsWith("base") || it.name.endsWith(".apk") }
-            val outApk = File(lspatchedDir, baseApk.name)
             val modulesParam = listOf(vendetta.absolutePath).joinToString(File.pathSeparator)
 
             val args = arrayOf(
                 baseApk.absolutePath,
-                "-o", outApk.absolutePath,
-                "-xm", modulesParam
+                "-o", lspatchedDir.absolutePath,
+                "-m", modulesParam,
+                "-f"
             )
 
-            runner.logger.i("Loading Xpatch engine...")
-            val dexOutputDir = context.getDir("xpatch_dex", Context.MODE_PRIVATE)
+            runner.logger.i("Loading NPatch engine...")
+            val dexOutputDir = context.getDir("npatch_dex", Context.MODE_PRIVATE)
 
             val classLoader = DexClassLoader(
-                xpatchJar.absolutePath,
+                npatchJar.absolutePath,
                 dexOutputDir.absolutePath,
                 null,
                 context.classLoader
             )
 
-            val clazz = classLoader.loadClass("com.storm.wind.xpatch.MainCommand")
+            val clazz = classLoader.loadClass("org.lsposed.patch.NPatch")
             val mainMethod = clazz.getMethod("main", Array<String>::class.java)
 
-            runner.logger.i("Executing Xpatch: ${args.joinToString(" ")}")
+            runner.logger.i("Executing NPatch: ${args.joinToString(" ")}")
             mainMethod.invoke(null, args as Any)
+
+            val patchedApk = lspatchedDir.listFiles()?.firstOrNull { it.name.contains("-patched") || it.name.contains("base") }
+            if (patchedApk != null && patchedApk.name != baseApk.name) {
+                patchedApk.renameTo(File(lspatchedDir, baseApk.name))
+            }
 
             files.forEach { file ->
                 if (file.absolutePath != baseApk.absolutePath) {
@@ -101,9 +106,9 @@ class AddVendettaStep(
         }
     }
 
-    private suspend fun downloadXpatch(out: File) {
+    private suspend fun downloadNPatch(out: File) {
         withContext(Dispatchers.IO) {
-            val request = Request.Builder().url(xpatchUrl).build()
+            val request = Request.Builder().url(npatchUrl).build()
             val response = httpClient.newCall(request).execute()
             
             if (!response.isSuccessful) {
@@ -114,7 +119,7 @@ class AddVendettaStep(
             val body = response.body ?: throw Exception("Empty body")
             out.sink().buffer().use { sink ->
                 val source = body.source()
-                val chunkSize = 256 * 1024L
+                val chunkSize = 2048 * 1024L
                 while (true) {
                     val read = source.read(sink.buffer, chunkSize)
                     if (read == -1L) break
