@@ -90,14 +90,16 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
             if (out.exists()) out.delete()
             return@withContext DownloadResult.Cancelled(false)
         } catch (e: Exception) {
-            retryCount++
-            if (out.exists()) out.delete()
-            delay(1000)
-            finalResult = DownloadResult.Error(e.message ?: "FAIL")
+                retryCount++
+                if (out.exists()) out.delete()
+                delay(1000)
+                finalResult = DownloadResult.Error(e.message ?: "FAIL")
+            }
         }
-    }
-    finalResult
-}
+        finalResult
+    } 
+
+} 
 
 sealed interface DownloadResult {
     data object Success : DownloadResult
