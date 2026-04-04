@@ -79,10 +79,9 @@ abstract class DownloadStep : Step() {
         
         val result = downloadManager.download(url, destination) { newProgress ->
             if (newProgress != null) {
-                if (newProgress - lastProgress >= 0.02f || newProgress == 1f) {
+                if (newProgress - lastProgress >= 0.1f || newProgress == 1f) {
                     progress = newProgress
                     lastProgress = newProgress
-                    runner.logger.d("$fileName: ${(newProgress * 100f).roundToInt()}%")
                 }
             }
         }
