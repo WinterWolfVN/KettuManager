@@ -1,0 +1,21 @@
+name: Inspect NPatch JAR
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "**" ]
+
+jobs:
+  analyze-jar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - run: wget https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar -O npatch.jar
+
+      - run: unzip npatch.jar META-INF/MANIFEST.MF -d extracted_manifest
+
+      - run: cat extracted_manifest/META-INF/MANIFEST.MF
+
+      - run: unzip -q npatch.jar -d jar_classes
+
+      - run: grep -rnE "android/os/Build\$VERSION_CODES;O|android/app/NotificationChannel|java/nio/file/Files" jar_classes/ || true
