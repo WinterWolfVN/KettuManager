@@ -11,8 +11,11 @@ import dev.beefers.vendetta.manager.installer.step.download.DownloadVendettaStep
 import dev.beefers.vendetta.manager.installer.util.Patcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.ConnectionSpec
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
+import okhttp3.TlsVersion
 import okio.buffer
 import okio.sink
 import org.koin.core.component.inject
@@ -31,7 +34,13 @@ class AddVendettaStep(
 
     private val xpatchUrl = "https://github.com/WindySha/Xpatch/releases/download/v6.0/xpatch-6.0.jar"
 
+    private val modernTlsSpec = ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+        .tlsVersions(TlsVersion.TLS_1_2)
+        .build()
+
     private val httpClient = OkHttpClient.Builder()
+        .connectionSpecs(listOf(modernTlsSpec, ConnectionSpec.COMPATIBLE_TLS, ConnectionSpec.CLEARTEXT))
+        .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
@@ -69,13 +78,13 @@ class AddVendettaStep(
             )
 
             runner.logger.i("Loading Xpatch engine...")
-            val dexOutputDir = File(context.cacheDir, "xpatch_dex").apply { mkdirs() }
+            val dexOutputDir = context.getDir("xpatch_dex", Context.MODE_PRIVATE)
 
             val classLoader = DexClassLoader(
                 xpatchJar.absolutePath,
                 dexOutputDir.absolutePath,
                 null,
-                this::class.java.classLoader
+                context.classLoader
             )
 
             val clazz = classLoader.loadClass("com.storm.wind.xpatch.MainCommand")
@@ -92,14 +101,22 @@ class AddVendettaStep(
         }
     }
 
-    private suspend fun downloadXpatch(out: File) = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(xpatchUrl).build()
-        httpClient.newCall(request).execute().use { response ->
-            val body = response.body ?: return@withContext
+    private suspend fun downloadXpatch(out: File) {
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(xpatchUrl).build()
+            val response = httpClient.newCall(request).execute()
+            
+            if (!response.isSuccessful) {
+                out.delete()
+                throw Exception("HTTP ${response.code}")
+            }
+            
+            val body = response.body ?: throw Exception("Empty body")
             out.sink().buffer().use { sink ->
                 val source = body.source()
+                val chunkSize = 256 * 1024L
                 while (true) {
-                    val read = source.read(sink.buffer, 64 * 1024L)
+                    val read = source.read(sink.buffer, chunkSize)
                     if (read == -1L) break
                     sink.emitCompleteSegments()
                 }
