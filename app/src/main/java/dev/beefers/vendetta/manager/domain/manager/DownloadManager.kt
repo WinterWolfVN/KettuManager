@@ -60,7 +60,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
 
                 out.sink().buffer().use { sink ->
                     val source = body.source()
-                    val chunkSize = 256 * 1024L
+                    val chunkSize = 1024 * 1024L
                     
                     while (isActive) {
                         val read = source.read(sink.buffer, chunkSize)
@@ -71,7 +71,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
                         
                         if (totalSize > 0) {
                             val currentProgress = downloaded.toFloat() / totalSize.toFloat()
-                            if (currentProgress - lastUpdateProgress >= 0.1f || downloaded == totalSize) {
+                            if (currentProgress - lastUpdateProgress >= 0.2f || downloaded == totalSize) {
                                 onProgressUpdate(currentProgress)
                                 lastUpdateProgress = currentProgress
                             }
