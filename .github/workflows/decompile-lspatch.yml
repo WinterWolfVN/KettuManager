@@ -1,0 +1,102 @@
+name: Decompile LSPatch
+
+on:
+  workflow_dispatch:
+
+jobs:
+  decompile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install unzip tools
+        run: sudo apt-get update && sudo apt-get install -y unzip zip grep
+
+      - name: Download JADX
+        run: |
+          wget -O jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip
+          unzip jadx.zip -d jadx
+
+      - name: Extract lspatch.aar
+        run: |
+          mkdir -p work/lspatch
+          unzip -o app/libs/lspatch.aar -d work/lspatch
+          ls -R work/lspatch
+
+      - name: Extract classes.jar
+        run: |
+          mkdir -p work/classes
+          unzip -o work/lspatch/classes.jar -d work/classes
+          ls -R work/classes | head -200
+
+      - name: Decompile classes.jar
+        run: |
+          mkdir -p work/jadx
+          ./jadx/bin/jadx \
+            -d work/jadx \
+            work/lspatch/classes.jar
+
+      - name: Search suspicious APIs
+        run: |
+          echo "==== java.nio.file ===="
+          grep -RIn "java.nio.file" work/jadx || true
+
+          echo "==== FileAttribute ===="
+          grep -RIn "FileAttribute" work/jadx || true
+
+          echo "==== StringConcatFactory ===="
+          grep -RIn "StringConcatFactory" work/jadx || true
+
+          echo "==== invoke-custom (smali/strings maybe) ===="
+          grep -RIn "invoke-custom" work || true
+
+          echo "==== TemporaryDirectory ===="
+          grep -RIn "TemporaryDirectory" work/jadx || true
+
+          echo "==== Files.createTempDirectory ===="
+          grep -RIn "createTempDirectory" work/jadx || true
+
+          echo "==== Files.createTempFile ===="
+          grep -RIn "createTempFile" work/jadx || true
+
+      - name: Save grep report
+        run: |
+          {
+            echo "==== java.nio.file ===="
+            grep -RIn "java.nio.file" work/jadx || true
+            echo
+            echo "==== FileAttribute ===="
+            grep -RIn "FileAttribute" work/jadx || true
+            echo
+            echo "==== StringConcatFactory ===="
+            grep -RIn "StringConcatFactory" work/jadx || true
+            echo
+            echo "==== TemporaryDirectory ===="
+            grep -RIn "TemporaryDirectory" work/jadx || true
+            echo
+            echo "==== createTempDirectory ===="
+            grep -RIn "createTempDirectory" work/jadx || true
+            echo
+            echo "==== createTempFile ===="
+            grep -RIn "createTempFile" work/jadx || true
+          } > work/report.txt
+
+          cat work/report.txt
+
+      - name: Upload decompiled source
+        uses: actions/upload-artifact@v4
+        with:
+          name: lspatch-decompiled
+          path: |
+            work/lspatch
+            work/classes
+            work/jadx
+            work/report.txt
