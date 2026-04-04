@@ -79,7 +79,7 @@ abstract class DownloadStep : Step() {
         
         val result = downloadManager.download(url, destination) { newProgress ->
             if (newProgress != null) {
-                if (newProgress - lastProgress >= 0.1f || newProgress == 1f) {
+                if (newProgress - lastProgress >= 0.2f || newProgress == 1f) {
                     progress = newProgress
                     lastProgress = newProgress
                 }
