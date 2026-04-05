@@ -39,9 +39,13 @@
 -keep class org.lsposed.lspatch.Patcher$Options { *; }
 -keep class org.lsposed.lspatch.share.LSPConfig { *; }
 -keep class org.lsposed.lspatch.share.PatchConfig { *; }
--keepclassmembers class org.lsposed.patch.LSPatch {
+-keepclassmembers class org.lsposed.patch.NPatch {
     private <fields>;
 }
+-keep class org.lsposed.patch.** { *; }
+-keep class com.android.tools.build.** { *; }
+-keep class org.apache.commons.io.** { *; }
+-keep class com.google.common.** { *; }
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
