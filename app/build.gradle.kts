@@ -105,7 +105,7 @@ dependencies {
     implementation(libs.bundles.shizuku)
     implementation(libs.bundles.voyager)
 
-    implementation(files("libs/jar-v0.8.0-538-release.jar"))
+    implementation(files("libs/npatch.aar"))
 
     implementation(libs.aboutlibraries.core)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
