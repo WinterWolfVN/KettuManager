@@ -43,7 +43,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
     var retryCount = 0
     var finalResult: DownloadResult = DownloadResult.Error("TIMEOUT")
 
-    while (retryCount < 3 && isActive) {
+        while (retryCount < 3 && isActive) {
         try {
             val request = Request.Builder().url(url).build()
             val response = httpClient.newCall(request).execute()
@@ -60,7 +60,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
 
                 out.sink().buffer().use { sink ->
                     val source = body.source()
-                    val chunkSize = 1024 * 1024L
+                    val chunkSize = 512 * 1024L
                     
                     while (isActive) {
                         val read = source.read(sink.buffer, chunkSize)
@@ -71,7 +71,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
                         
                         if (totalSize > 0) {
                             val currentProgress = downloaded.toFloat() / totalSize.toFloat()
-                            if (currentProgress - lastUpdateProgress >= 0.2f || downloaded == totalSize) {
+                            if (currentProgress - lastUpdateProgress >= 0.1f || downloaded == totalSize) {
                                 onProgressUpdate(currentProgress)
                                 lastUpdateProgress = currentProgress
                             }
@@ -90,16 +90,12 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
             if (out.exists()) out.delete()
             return@withContext DownloadResult.Cancelled(false)
         } catch (e: Exception) {
-                retryCount++
-                if (out.exists()) out.delete()
-                delay(1000)
-                finalResult = DownloadResult.Error(e.message ?: "FAIL")
-            }
+            retryCount++
+            if (out.exists()) out.delete()
+            delay(1000)
+            finalResult = DownloadResult.Error(e.message ?: "FAIL")
         }
-        finalResult
-    } 
-
-} 
+    }
 
 sealed interface DownloadResult {
     data object Success : DownloadResult
