@@ -22,15 +22,16 @@ class AddVendettaStep(
 
     override suspend fun run(runner: StepRunner) {
         val vendetta = runner.getCompletedStep<DownloadVendettaStep>().workingCopy
-        val files = signedDir.listFiles()?.takeIf { it.isNotEmpty() } ?: return
-
+        
         lspatchedDir.mkdirs()
 
-        val baseApk = files.first { it.name.startsWith("base") || it.name.endsWith(".apk") }
+        val baseApk = signedDir.listFiles()?.firstOrNull { it.name.startsWith("base") || it.name.endsWith(".apk") } 
+            ?: throw Error("Missing base APK")
+            
         val modulesParam = listOf(vendetta.absolutePath).joinToString(File.pathSeparator)
 
         val argsList = mutableListOf<String>()
-        argsList.addAll(files.map { it.absolutePath })
+        argsList.add(signedDir.absolutePath)
         argsList.add("-o")
         argsList.add(lspatchedDir.absolutePath)
         argsList.add("-m")
@@ -41,14 +42,8 @@ class AddVendettaStep(
         argsList.add("password")
         argsList.add("alias")
         argsList.add("password")
-        argsList.add("--v1-signing-enabled")
-        argsList.add("false")
-        argsList.add("--v2-signing-enabled")
-        argsList.add("true")
-        argsList.add("--v3-signing-enabled")
-        argsList.add("false")
 
-        runner.logger.i("Executing built-in NPatch engine...")
+        runner.logger.i("Executing built-in NPatch engine on directory...")
 
         val clazz = Class.forName("org.lsposed.patch.NPatch")
         val mainMethod = clazz.getMethod("main", Array<String>::class.java)
@@ -58,6 +53,12 @@ class AddVendettaStep(
         val patchedApk = lspatchedDir.listFiles()?.firstOrNull { it.name.contains("-patched") || it.name.contains("base") }
         if (patchedApk != null && patchedApk.name != baseApk.name) {
             patchedApk.renameTo(File(lspatchedDir, baseApk.name))
+        }
+        
+        signedDir.listFiles()?.forEach { file ->
+            if (file.absolutePath != baseApk.absolutePath && !file.name.contains("-patched")) {
+                file.copyTo(File(lspatchedDir, file.name), overwrite = true)
+            }
         }
     }
 }
