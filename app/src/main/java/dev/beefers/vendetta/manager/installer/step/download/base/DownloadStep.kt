@@ -59,8 +59,8 @@ abstract class DownloadStep : Step() {
 
     override suspend fun run(runner: StepRunner) {
         val fileName = destination.name
-        
-        destination.parentFile?.mkdirs() 
+
+        destination.parentFile?.mkdirs()
         workingCopy.parentFile?.mkdirs()
         
         if (destination.exists()) {
@@ -82,6 +82,7 @@ abstract class DownloadStep : Step() {
                 if (newProgress - lastProgress >= 0.2f || newProgress == 1f) {
                     progress = newProgress
                     lastProgress = newProgress
+                    runner.logger.d("$fileName: ${(newProgress * 100f).roundToInt()}%")
                 }
             }
         }
