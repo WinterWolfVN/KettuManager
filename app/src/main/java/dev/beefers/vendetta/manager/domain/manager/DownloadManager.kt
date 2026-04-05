@@ -60,7 +60,7 @@ suspend fun download(url: String, out: File, onProgressUpdate: (Float?) -> Unit)
 
                 out.sink().buffer().use { sink ->
                     val source = body.source()
-                    val chunkSize = 2048 * 1024L
+                    val chunkSize = 1024 * 1024L
                     
                     while (isActive) {
                         val read = source.read(sink.buffer, chunkSize)
