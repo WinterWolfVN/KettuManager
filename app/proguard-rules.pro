@@ -42,10 +42,17 @@
 -keepclassmembers class org.lsposed.patch.NPatch {
     private <fields>;
 }
+
 -keep class org.lsposed.patch.** { *; }
 -keep class com.android.tools.build.** { *; }
 -keep class org.apache.commons.io.** { *; }
 -keep class com.google.common.** { *; }
+
+-keep class org.jf.dexlib2.** { *; }
+-keep class org.jf.smali.** { *; }
+-keep class org.jf.util.** { *; }
+-keep class pxb.android.axml.** { *; }
+-keep class com.googlecode.d2j.** { *; }
 
 # Uncomment this to preserve the line number information for
 # debugging stack traces.
