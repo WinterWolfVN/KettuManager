@@ -29,9 +29,9 @@ jobs:
       - name: 🔑 Cấp quyền thực thi cho Gradle
         run: chmod +x gradlew
 
-      - name: 🧪 Fetch and forge NPatch AAR
+      - name: Fetch and forge Custom NPatch AAR
         run: |
-          curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
+          curl -sSL -o npatch.jar https://github.com/WinterWolfVN/KettuManager/raw/refs/heads/main/app/libs/jar-v0.8.0-538-release.jar
           unzip -q npatch.jar "META-INF/**"
           mv npatch.jar classes.jar
           touch R.txt
@@ -45,7 +45,7 @@ jobs:
           mkdir -p app/libs/
           mv npatch.aar app/libs/
           rm -rf META-INF AndroidManifest.xml classes.jar R.txt
-    
+      
       - name: 🔨 Build Debug APK (Android 7 Ready)
         run: ./gradlew assembleDebug --stacktrace
 
