@@ -10,7 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - run: curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
+      - run: curl -sSL -o npatch.jar https://github.com/WinterWolfVN/KettuManager/raw/refs/heads/main/app/libs/jar-v0.8.0-538-release.jar
+
+      - run: zip -q -d npatch.jar "*.dex" || true
 
       - run: |
           D8_PATH=$(find $ANDROID_HOME/build-tools -name d8 | sort -r | head -n 1)
