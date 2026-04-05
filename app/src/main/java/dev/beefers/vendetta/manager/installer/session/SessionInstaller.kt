@@ -44,9 +44,9 @@ internal class SessionInstaller(private val context: Context) : Installer {
 
         @SuppressLint("UnspecifiedImmutableFlag")
         val contentIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            PendingIntent.getService(context, 0, callbackIntent, PendingIntent.FLAG_MUTABLE)
+            PendingIntent.getService(context, 0, callbackIntent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         } else {
-            PendingIntent.getService(context, 0, callbackIntent, 0)
+            PendingIntent.getService(context, 0, callbackIntent, PendingIntent.FLAG_UPDATE_CURRENT)
         }
 
         session.commit(contentIntent.intentSender)
