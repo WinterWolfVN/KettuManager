@@ -31,7 +31,7 @@ jobs:
 
       - name: Fetch and forge Custom NPatch AAR
         run: |
-          curl -sSL -o npatch.jar https://github.com/WinterWolfVN/KettuManager/raw/refs/heads/main/app/libs/jar-v0.8.0-538-release.jar
+          curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
           unzip -q npatch.jar "META-INF/**"
           mv npatch.jar classes.jar
           touch R.txt
