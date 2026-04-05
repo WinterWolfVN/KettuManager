@@ -14,14 +14,6 @@ import dev.beefers.vendetta.manager.utils.isMiui
 import org.koin.core.component.inject
 import java.io.File
 
-/**
- * Installs all the modified splits with the users desired [Installer]
- *
- * @see SessionInstaller
- * @see ShizukuInstaller
- *
- * @param lspatchedDir Where all the patched APKs are
- */
 class InstallStep(
     private val lspatchedDir: File
 ): Step() {
@@ -34,16 +26,20 @@ class InstallStep(
 
     override suspend fun run(runner: StepRunner) {
         runner.logger.i("Installing apks")
-        val files = lspatchedDir.listFiles()
-            ?.takeIf { it.isNotEmpty() }
-            ?: throw Error("Missing APKs from LSPatch step; failure likely")
+        
+        val allFiles = lspatchedDir.listFiles()?.filter { it.extension.equals("apk", ignoreCase = true) }
+        
+        if (allFiles.isNullOrEmpty()) {
+            throw Error("Missing APKs from NPatch step; failure likely")
+        }
+
+        val sortedFiles = allFiles.sortedBy { if (it.name.startsWith("base") || it.name.contains("base")) 0 else 1 }.toTypedArray()
 
         val installer: Installer = when (preferences.installMethod) {
             InstallMethod.DEFAULT -> SessionInstaller(context)
             InstallMethod.SHIZUKU -> ShizukuInstaller(context)
         }
 
-        installer.installApks(silent = !isMiui, *files)
+        installer.installApks(silent = !isMiui, *sortedFiles)
     }
-
 }
