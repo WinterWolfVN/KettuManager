@@ -20,7 +20,14 @@ object Patcher {
         argsList.add("alias")
         argsList.add("password")
 
-        logger.i("Executing built-in NPatch engine with Keystore...")
+        argsList.add("--v1-signing-enabled")
+        argsList.add("false")
+        argsList.add("--v2-signing-enabled")
+        argsList.add("true")
+        argsList.add("--v3-signing-enabled")
+        argsList.add("false")
+
+        logger.i("Executing built-in NPatch engine with V2 Signature...")
         
         NPatch.main(argsList.toTypedArray())
 
