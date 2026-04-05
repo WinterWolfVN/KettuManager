@@ -28,7 +28,6 @@ class ShizukuInstaller(private val context: Context) : Installer, KoinComponent 
         val tempDir = File("/data/local/tmp")
         val movedApks = mutableListOf<File>()
 
-        // Copy each split to tmp
         apks.forEach {
             val moveCommand = "cp ${it.absolutePath} ${tempDir.absolutePath}"
             val moveResult = executeShellCommand(moveCommand)
@@ -39,7 +38,7 @@ class ShizukuInstaller(private val context: Context) : Installer, KoinComponent 
                 throw RuntimeException("Failed to move ${it.absolutePath} to temp dir")
         }
 
-        val installCommand = "pm install ${movedApks.joinToString(" ") { it.absolutePath }}"
+        val installCommand = "pm install-multiple ${movedApks.joinToString(" ") { it.absolutePath }}"
         executeShellCommand(installCommand)
 
         installManager.getInstalled()
@@ -57,5 +56,4 @@ class ShizukuInstaller(private val context: Context) : Installer, KoinComponent 
 
         return process.inputStream.bufferedReader().use { it.readText().trim() }
     }
-
 }
