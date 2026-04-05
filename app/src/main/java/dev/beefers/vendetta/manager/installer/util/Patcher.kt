@@ -2,7 +2,7 @@ package dev.beefers.vendetta.manager.installer.util
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.lsposed.patch.LSPatch
+import org.lsposed.patch.NPatch
 import org.lsposed.patch.util.Logger
 import java.io.File
 
@@ -15,7 +15,7 @@ object Patcher {
         embeddedModules: List<String>
     ) {
         withContext(Dispatchers.IO) {
-            LSPatch(
+            NPatch(
                 logger,
                 *apkPaths.toTypedArray(),
                 "-o",
@@ -25,6 +25,7 @@ object Patcher {
                 "-v",
                 "-m",
                 *embeddedModules.toTypedArray(),
+                "-f",
                 "-k",
                 Signer.keyStore.absolutePath,
                 "password",
