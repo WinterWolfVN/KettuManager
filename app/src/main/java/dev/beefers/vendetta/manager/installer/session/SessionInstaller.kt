@@ -30,9 +30,11 @@ internal class SessionInstaller(private val context: Context) : Installer {
         val session = packageInstaller.openSession(sessionId)
 
         apks.forEach { apk ->
-            session.openWrite(apk.name, 0, apk.length()).use {
-                it.write(apk.readBytes())
-                session.fsync(it)
+            session.openWrite(apk.name, 0, apk.length()).use { out ->
+                apk.inputStream().use { input ->
+                    input.copyTo(out, 2 * 1024 * 1024)
+                }
+                session.fsync(out)
             }
         }
 
