@@ -1,4 +1,4 @@
-name: Build Kettu Manager (Android 7) 🦊🚀
+name: Kettu Manager (Android 7) 🦊
 
 on:
   workflow_dispatch: # Cho phép bấm nút Build bằng tay 😈
@@ -28,7 +28,24 @@ jobs:
 
       - name: 🔑 Cấp quyền thực thi cho Gradle
         run: chmod +x gradlew
-      
+
+      - name: 🧪 Fetch and forge NPatch AAR
+        run: |
+          curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
+          unzip -q npatch.jar "META-INF/**"
+          mv npatch.jar classes.jar
+          touch R.txt
+          cat >AndroidManifest.xml <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.lsposed.patch.npatch">
+              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34" />
+          </manifest>
+          EOF
+          zip -rq npatch.aar R.txt AndroidManifest.xml META-INF classes.jar
+          mkdir -p app/libs/
+          mv npatch.aar app/libs/
+          rm -rf META-INF AndroidManifest.xml classes.jar R.txt
+    
       - name: 🔨 Build Debug APK (Android 7 Ready)
         run: ./gradlew assembleDebug --stacktrace
 
