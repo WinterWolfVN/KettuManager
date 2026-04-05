@@ -1,4 +1,4 @@
-name: Inspect NPatch JAR
+name: Hunt NIO in Smali
 
 on:
   workflow_dispatch:
@@ -6,16 +6,18 @@ on:
     branches: [ "**" ]
 
 jobs:
-  analyze-jar:
+  hunt-nio:
     runs-on: ubuntu-latest
 
     steps:
-      - run: wget https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar -O npatch.jar
+      - run: curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
 
-      - run: unzip npatch.jar META-INF/MANIFEST.MF -d extracted_manifest
+      - run: |
+          D8_PATH=$(find $ANDROID_HOME/build-tools -name d8 | sort -r | head -n 1)
+          $D8_PATH --min-api 24 --output . npatch.jar
 
-      - run: cat extracted_manifest/META-INF/MANIFEST.MF
+      - run: curl -sSL -o baksmali.jar https://bitbucket.org/JesusFreke/smali/downloads/baksmali-2.5.2.jar
 
-      - run: unzip -q npatch.jar -d jar_classes
+      - run: java -jar baksmali.jar d classes.dex -o smali_out
 
-      - run: grep -rnE "android/os/Build\$VERSION_CODES;O|android/app/NotificationChannel|java/nio/file/Files" jar_classes/ || true
+      - run: grep -rn "Ljava/nio/file/Files;->" smali_out/ || true
