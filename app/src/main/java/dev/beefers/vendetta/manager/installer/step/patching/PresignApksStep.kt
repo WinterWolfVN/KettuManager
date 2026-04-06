@@ -32,7 +32,7 @@ class PresignApksStep(
         signedDir.mkdirs()
         val apks = listOf(baseApk, libsApk, langApk, resApk)
 
-        if (Build.VERSION.SDK_INT >= 30) {
+        if(Build.VERSION.SDK_INT >= 30) {
             for (file in apks) {
                 runner.logger.i("Byte aligning ${file.name}")
                 val bytes = ZipReader(file).use {
@@ -58,4 +58,5 @@ class PresignApksStep(
             Signer.signApk(it, File(signedDir, it.name))
         }
     }
+
 }
