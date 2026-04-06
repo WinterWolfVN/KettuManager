@@ -29,7 +29,7 @@ jobs:
       - name: 🔑 Cấp quyền thực thi cho Gradle
         run: chmod +x gradlew
 
-      - name: 🧪 Fetch and forge Custom NPatch AAR
+      - name: 🧪 Fetch, forge and push NPatch AAR to Repo
         run: |
           curl -sSL -o npatch.jar https://github.com/7723mod/NPatch/releases/download/v0.8.0/jar-v0.8.0-538-release.jar
           unzip -q npatch.jar "META-INF/**"
@@ -45,6 +45,13 @@ jobs:
           mkdir -p app/libs/
           mv npatch.aar app/libs/
           rm -rf META-INF AndroidManifest.xml classes.jar R.txt
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/libs/npatch.aar
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "Auto-forge and add npatch.aar to libs"
+            git push
+          fi
       
       - name: 🔨 Build Debug APK (Android 7 Ready)
         run: ./gradlew assembleDebug --stacktrace
@@ -54,4 +61,4 @@ jobs:
         with:
           name: Kettu-Manager-Android7-Debug
           path: app/build/outputs/apk/debug/**/*.apk
-          retention-days: 7 # Giữ file trên GitHub 7 ngày
+          retention-days: 30
